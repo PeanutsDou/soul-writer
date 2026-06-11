@@ -122,9 +122,14 @@ const EditorLayout: React.FC = () => {
 
         <div className="editor-panel">
           {currentChapter ? (
-            <div className="editor-content">
-              <EditorContent editor={editor} />
-            </div>
+            <>
+              <div className="editor-doc-title">
+                <span className="editor-doc-title-text">{currentChapter}</span>
+              </div>
+              <div className="editor-content">
+                <EditorContent editor={editor} />
+              </div>
+            </>
           ) : (
             <div className="editor-empty">
               {currentBook ? '选择左侧章节开始写作' : '打开一本书开始写作'}
