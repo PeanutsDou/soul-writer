@@ -10,7 +10,21 @@ import FontFamily from '@tiptap/extension-font-family';
 import FontSize from '../../extensions/FontSize';
 import LineHeight from '../../extensions/LineHeight';
 import { useDocumentStore } from '../../stores/document-store';
+import { useEditorPrefs } from '../../stores/editor-prefs';
 import EditorToolbar from './EditorToolbar';
+
+function countWords(doc: any): number {
+  let count = 0;
+  function walk(node: any) {
+    if (typeof node === 'object' && node !== null) {
+      if (node.text && typeof node.text === 'string') count += [...node.text].length;
+      for (const v of Object.values(node)) walk(v);
+    }
+    if (Array.isArray(node)) node.forEach(walk);
+  }
+  walk(doc);
+  return count;
+}
 
 const EditorPanel: React.FC = () => {
   const {
@@ -18,6 +32,7 @@ const EditorPanel: React.FC = () => {
     saveDocument,
   } = useDocumentStore();
 
+  const prefs = useEditorPrefs();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastChapterRef = useRef<string | null>(null);
 
@@ -39,11 +54,22 @@ const EditorPanel: React.FC = () => {
       Placeholder.configure({ placeholder: '开始写作...' }),
     ],
     content: null,
-    onUpdate: ({ editor }) => {
+    onCreate: ({ editor: ed }) => {
+      // Apply saved line-height to editor DOM
+      (ed.view.dom as HTMLElement).style.setProperty('--editor-line-height', prefs.lineHeight);
+    },
+    onUpdate: ({ editor: ed }) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        saveDocument(editor.getJSON());
+        const json = ed.getJSON();
+        saveDocument(json);
       }, 1000);
+    },
+    editorProps: {
+      attributes: {
+        // Default font for new text — set via CSS on the editor
+        style: `font-family: ${prefs.fontFamily === '默认' ? 'var(--font-sans)' : prefs.fontFamily}`,
+      },
     },
   });
 
@@ -52,18 +78,19 @@ const EditorPanel: React.FC = () => {
     if (editor && document && currentChapter && currentChapter !== lastChapterRef.current) {
       lastChapterRef.current = currentChapter;
       editor.commands.setContent(document);
+      // Re-apply line-height after content load
+      (editor.view.dom as HTMLElement).style.setProperty('--editor-line-height', prefs.lineHeight);
       setTimeout(() => {
         editor.commands.focus('end');
       }, 50);
     }
-  }, [currentChapter, document, editor]);
+  }, [currentChapter, document, editor, prefs.lineHeight]);
 
   // Cleanup timer and save on unmount (app close)
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
-        // Flush pending save immediately before unmount
         saveDocument(editor?.getJSON());
       }
     };

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
+import { useEditorPrefs } from '../../stores/editor-prefs';
 
 const FONT_SIZES = ['12', '14', '16', '18', '20', '24', '28', '32', '36', '48'];
 const FONT_FAMILIES = [
@@ -26,22 +27,32 @@ interface Props {
 
 const EditorToolbar: React.FC<Props> = ({ editor }) => {
   const [showColor, setShowColor] = useState(false);
+  const prefs = useEditorPrefs();
 
   const setFontFamily = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (!editor) return;
+    prefs.setFontFamily(val);
     if (val === '默认') {
       editor.chain().focus().unsetFontFamily().run();
     } else {
       editor.chain().focus().setFontFamily(val).run();
     }
-  }, [editor]);
+  }, [editor, prefs]);
 
   const setFontSize = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (!editor || !val) return;
+    prefs.setFontSize(val);
     editor.chain().focus().setFontSize(val + 'px').run();
-  }, [editor]);
+  }, [editor, prefs]);
+
+  const setLineHeight = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (!editor) return;
+    prefs.setLineHeight(val);
+    editor.chain().focus().setLineHeight(val).run();
+  }, [editor, prefs]);
 
   const setColor = useCallback((color: string) => {
     if (!editor) return;
@@ -51,13 +62,13 @@ const EditorToolbar: React.FC<Props> = ({ editor }) => {
 
   if (!editor) return null;
 
-  const activeFontSize = (editor.getAttributes('textStyle').fontSize || '16').replace('px', '');
+  const activeFontSize = (editor.getAttributes('textStyle').fontSize || prefs.fontSize).replace('px', '');
 
   return (
     <div className="editor-toolbar">
       {/* Font Family */}
       <div className="toolbar-group">
-        <select className="toolbar-select" onChange={setFontFamily} defaultValue="默认">
+        <select className="toolbar-select" value={prefs.fontFamily} onChange={setFontFamily}>
           {FONT_FAMILIES.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
@@ -122,17 +133,9 @@ const EditorToolbar: React.FC<Props> = ({ editor }) => {
         </div>
       </div>
 
-      {/* Paragraph spacing */}
+      {/* Line Height */}
       <div className="toolbar-group">
-        <select
-          className="toolbar-select"
-          onChange={(e) => {
-            if (editor) {
-              editor.chain().focus().setLineHeight(e.target.value).run();
-            }
-          }}
-          defaultValue="1.8"
-        >
+        <select className="toolbar-select" value={prefs.lineHeight} onChange={setLineHeight}>
           <option value="1.2">行高 1.2</option>
           <option value="1.5">行高 1.5</option>
           <option value="1.8">行高 1.8</option>
