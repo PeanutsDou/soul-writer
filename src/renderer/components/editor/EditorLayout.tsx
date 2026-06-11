@@ -16,6 +16,20 @@ import EditorToolbar from './EditorToolbar';
 import ChatPanel from '../ai/ChatPanel';
 import ResizeHandle from '../ResizeHandle';
 
+const SIDEBAR_STORAGE_KEY = 'soul-writer-sidebar-widths';
+
+function loadWidths(): { left: number; right: number } {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { left: 240, right: 340 };
+}
+
+function saveWidths(left: number, right: number) {
+  try { localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify({ left, right })); } catch {}
+}
+
 const EditorLayout: React.FC = () => {
   const {
     currentChapter, currentBook, document, wordCount, saveStatus,
@@ -26,8 +40,9 @@ const EditorLayout: React.FC = () => {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastChapterRef = useRef<string | null>(null);
 
-  const [leftWidth, setLeftWidth] = useState(240);
-  const [rightWidth, setRightWidth] = useState(340);
+  const initWidths = loadWidths();
+  const [leftWidth, setLeftWidth] = useState(initWidths.left);
+  const [rightWidth, setRightWidth] = useState(initWidths.right);
 
   const editor = useEditor({
     extensions: [
@@ -76,8 +91,22 @@ const EditorLayout: React.FC = () => {
     return () => { if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveDocument(editor?.getJSON()); } };
   }, []);
 
-  const onResizeLeft = useCallback((d: number) => setLeftWidth((w) => Math.max(160, Math.min(500, w + d))), []);
-  const onResizeRight = useCallback((d: number) => setRightWidth((w) => Math.max(240, Math.min(600, w - d))), []);
+  const onResizeLeft = useCallback((d: number) => {
+    setLeftWidth((w) => {
+      const next = Math.max(160, Math.min(500, w + d));
+      saveWidths(next, rightWidth);
+      return next;
+    });
+  }, [rightWidth]);
+
+  const onResizeRight = useCallback((d: number) => {
+    setRightWidth((w) => {
+      const maxW = Math.floor(window.innerWidth / 2);
+      const next = Math.max(240, Math.min(maxW, w - d));
+      saveWidths(leftWidth, next);
+      return next;
+    });
+  }, [leftWidth]);
 
   return (
     <div className="editor-layout">
