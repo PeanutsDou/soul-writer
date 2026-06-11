@@ -84,6 +84,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   saveDocument: async (content) => {
     const { currentBook, currentChapter } = get();
     if (!currentBook || !currentChapter) return;
+    // Skip save if AI chat is in progress (pipe is busy)
+    const { isChatBusy } = await import('./ai-store');
+    if (isChatBusy) return;
     set({ saveStatus: '保存中...' });
     try {
       const result = await invoke<any>('save_document', { bookName: currentBook, chapterName: currentChapter, content });

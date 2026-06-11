@@ -37,10 +37,18 @@ enum StreamLine {
     StreamError { error: String },
     #[serde(rename = "stream_end")]
     End,
+    #[serde(rename = "tool_start")]
+    ToolStart { name: String, args: Value },
+    #[serde(rename = "tool_end")]
+    ToolEnd { name: String, result: String },
+    #[serde(rename = "done")]
+    Done,
 }
 
 pub enum StreamEvent {
     Chunk(String),
+    ToolStart { name: String, args: Value },
+    ToolEnd { name: String, result: String },
     Error(String),
     Done,
 }
@@ -150,11 +158,14 @@ impl PythonBridge {
                 match sl {
                     StreamLine::Start => {}
                     StreamLine::Chunk { content } => on_event(StreamEvent::Chunk(content)),
+                    StreamLine::ToolStart { name, args } => on_event(StreamEvent::ToolStart { name, args }),
+                    StreamLine::ToolEnd { name, result } => on_event(StreamEvent::ToolEnd { name, result }),
                     StreamLine::StreamError { error } => {
                         on_event(StreamEvent::Error(error.clone()));
                         return Err(error);
                     }
-                    StreamLine::End => on_event(StreamEvent::Done),
+                    StreamLine::Done => on_event(StreamEvent::Done),
+                    StreamLine::End => {} // legacy, ignore
                 }
                 continue;
             }

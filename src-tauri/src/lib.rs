@@ -134,6 +134,12 @@ fn chat(message: String, config: Value, current_book: Option<String>, current_ch
             StreamEvent::Chunk(content) => {
                 let _ = app.emit("chat:chunk", json!({ "content": content }));
             }
+            StreamEvent::ToolStart { name, args } => {
+                let _ = app.emit("chat:tool", json!({ "phase": "start", "name": name, "args": args }));
+            }
+            StreamEvent::ToolEnd { name, result } => {
+                let _ = app.emit("chat:tool", json!({ "phase": "end", "name": name, "result": result }));
+            }
             StreamEvent::Error(error) => {
                 let _ = app.emit("chat:error", json!({ "error": error }));
             }

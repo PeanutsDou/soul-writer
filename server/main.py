@@ -67,15 +67,6 @@ def _build_workspace(current_book=None, current_chapter=None) -> str:
                 parts.append(f"📄 {ch}{m}")
         except: pass
 
-    if current_chapter and current_book:
-        try:
-            doc = store.get_document(current_book, current_chapter)
-            from ai.tools import doc_to_text
-            text = doc_to_text(doc)
-            preview = text[:2000] + ("..." if len(text)>2000 else "")
-            parts.append(f"\n## 当前章节「{current_chapter}」内容（前2000字）\n{preview}")
-        except: pass
-
     return "\n".join(parts)
 
 
@@ -133,10 +124,8 @@ def handle(method: str, params: dict):
         sys.stdout.flush()
 
         try:
-            for text in agent.chat(message):
-                # text is the full response (not token-by-token)
-                # Write as single chunk
-                sys.stdout.write(json.dumps({"type": "stream_chunk", "content": text}, ensure_ascii=False) + "\n")
+            for event in agent.chat(message):
+                sys.stdout.write(json.dumps(event, ensure_ascii=False) + "\n")
                 sys.stdout.flush()
         except Exception as e:
             sys.stdout.write(json.dumps({"type": "stream_error", "error": str(e)}, ensure_ascii=False) + "\n")
