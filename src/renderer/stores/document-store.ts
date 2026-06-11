@@ -77,7 +77,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   loadDocument: async (bookName, chapterName) => {
     const doc = await invoke<any>('get_document', { bookName, chapterName });
-    set({ document: doc, currentChapter: chapterName, wordCount: countWords(doc), saveStatus: '' });
+    const count = doc?._count ?? countWords(doc);
+    set({ document: doc, currentChapter: chapterName, wordCount: count, saveStatus: '' });
   },
 
   saveDocument: async (content) => {
@@ -85,8 +86,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     if (!currentBook || !currentChapter) return;
     set({ saveStatus: '保存中...' });
     try {
-      await invoke('save_document', { bookName: currentBook, chapterName: currentChapter, content });
-      set({ document: content, wordCount: countWords(content), saveStatus: '已保存' });
+      const result = await invoke<any>('save_document', { bookName: currentBook, chapterName: currentChapter, content });
+      // Use backend's character count (authoritative)
+      const backendCount = result?.debug_count ?? countWords(content);
+      set({ document: content, wordCount: backendCount, saveStatus: '已保存' });
     } catch {
       set({ saveStatus: '保存失败' });
     }

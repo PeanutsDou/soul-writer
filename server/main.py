@@ -65,10 +65,40 @@ def handle(method: str, params: dict):
         return {"ok": True}
 
     elif method == "get_document":
-        return store.get_document(params["book_name"], params["chapter_name"])
+        doc = store.get_document(params["book_name"], params["chapter_name"])
+        # Include authoritative character count
+        texts = []
+        def walk(n):
+            if isinstance(n, dict):
+                if 'text' in n and isinstance(n['text'], str) and n['text']:
+                    texts.append(n['text'])
+                for v in n.values():
+                    walk(v)
+            elif isinstance(n, list):
+                for item in n:
+                    walk(item)
+        walk(doc)
+        doc["_count"] = sum(len(t) for t in texts)
+        return doc
     elif method == "save_document":
-        store.save_document(params["book_name"], params["chapter_name"], params["content"])
-        return {"ok": True}
+        content = params["content"]
+        # Debug: extract all text to stderr
+        texts = []
+        def walk(n):
+            if isinstance(n, dict):
+                if 'text' in n and isinstance(n['text'], str) and n['text']:
+                    texts.append(n['text'])
+                for v in n.values():
+                    walk(v)
+            elif isinstance(n, list):
+                for item in n:
+                    walk(item)
+        walk(content)
+        import sys
+        total = sum(len(t) for t in texts)
+        print(f"[DEBUG] texts={texts!r}, total_chars={total}", file=sys.stderr, flush=True)
+        store.save_document(params["book_name"], params["chapter_name"], content)
+        return {"ok": True, "debug_count": total}
 
     else:
         raise ValueError(f"Unknown method: {method}")

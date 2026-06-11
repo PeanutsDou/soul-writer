@@ -63,7 +63,7 @@ const EditorPanel: React.FC = () => {
       saveTimerRef.current = setTimeout(() => {
         const json = ed.getJSON();
         saveDocument(json);
-      }, 1000);
+      }, 600);
     },
     editorProps: {
       attributes: {
@@ -86,7 +86,21 @@ const EditorPanel: React.FC = () => {
     }
   }, [currentChapter, document, editor, prefs.lineHeight]);
 
-  // Cleanup timer and save on unmount (app close)
+  // Ctrl+S manual save
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        saveDocument(editor?.getJSON());
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [editor, saveDocument]);
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
