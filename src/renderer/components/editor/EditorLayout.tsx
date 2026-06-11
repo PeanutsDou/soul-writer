@@ -25,9 +25,7 @@ const EditorLayout: React.FC = () => {
         <ResizeHandle onResize={onResizeLeft} />
         <EditorPanel />
         <ResizeHandle onResize={onResizeRight} />
-        <div className="chat-panel" style={{ width: rightWidth }}>
-          <ChatPanel />
-        </div>
+        <ChatPanel width={rightWidth} />
       </div>
     </div>
   );

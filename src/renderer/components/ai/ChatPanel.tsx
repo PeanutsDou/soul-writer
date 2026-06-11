@@ -5,7 +5,11 @@ import ChatMessageBubble from './ChatMessage';
 import ChatInput from './ChatInput';
 import ModelSwitcher from './ModelSwitcher';
 
-const ChatPanel: React.FC = () => {
+interface Props {
+  width?: number;
+}
+
+const ChatPanel: React.FC<Props> = ({ width }) => {
   const { messages, streaming, send, init, destroy } = useAiStore();
   const configs = useModelConfigStore((s) => s.configs);
   const loadConfigs = useModelConfigStore((s) => s.load);
@@ -24,7 +28,7 @@ const ChatPanel: React.FC = () => {
   const hasConfig = configs.length > 0;
 
   return (
-    <div className="chat-panel">
+    <div className="chat-panel" style={width ? { width } : undefined}>
       <div className="chat-messages">
         {!hasConfig ? (
           <div className="chat-empty">

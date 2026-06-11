@@ -20,7 +20,7 @@ const ModelSwitcher: React.FC = () => {
       >
         {configs.map((c) => (
           <option key={c.id} value={c.id}>
-            {c.name} — {c.model}
+            {c.name} · {c.model}
           </option>
         ))}
       </select>

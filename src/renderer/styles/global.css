@@ -946,21 +946,21 @@ html, body {
 .model-switcher {
   display: flex;
   align-items: center;
-  padding: 4px 14px 8px;
+  padding: 0 14px 8px;
 }
 
 .model-select {
-  width: 100%;
-  background: var(--bg-primary);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 3px 8px;
+  padding: 2px 6px;
   font-size: 11px;
   font-family: var(--font-sans);
   cursor: pointer;
   outline: none;
 }
+.model-select:hover { border-color: var(--accent-dim); }
 .model-select:focus { border-color: var(--accent-dim); }
 
 /* Settings Panel */
