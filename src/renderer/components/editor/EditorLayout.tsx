@@ -11,13 +11,9 @@ import FontSize from '../../extensions/FontSize';
 import LineHeight from '../../extensions/LineHeight';
 import { useDocumentStore } from '../../stores/document-store';
 import { useEditorPrefs } from '../../stores/editor-prefs';
-import { useAiStore } from '../../stores/ai-store';
-import { useModelConfigStore } from '../../stores/model-config-store';
 import Sidebar from './Sidebar';
 import EditorToolbar from './EditorToolbar';
-import ChatMessageBubble from '../ai/ChatMessage';
-import ChatInput from '../ai/ChatInput';
-import ModelSwitcher from '../ai/ModelSwitcher';
+import ChatPanel from '../ai/ChatPanel';
 import ResizeHandle from '../ResizeHandle';
 
 const EditorLayout: React.FC = () => {
@@ -25,20 +21,13 @@ const EditorLayout: React.FC = () => {
     currentChapter, currentBook, document, wordCount, saveStatus,
     saveDocument,
   } = useDocumentStore();
-  const { messages, streaming, send, init, destroy } = useAiStore();
-  const configs = useModelConfigStore((s) => s.configs);
-  const loadConfigs = useModelConfigStore((s) => s.load);
   const prefs = useEditorPrefs();
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastChapterRef = useRef<string | null>(null);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const [leftWidth, setLeftWidth] = useState(240);
   const [rightWidth, setRightWidth] = useState(340);
-
-  // Init AI store listeners
-  useEffect(() => { loadConfigs(); init(); return () => destroy(); }, []);
 
   const editor = useEditor({
     extensions: [
@@ -62,7 +51,6 @@ const EditorLayout: React.FC = () => {
     },
   });
 
-  // Load document on chapter switch
   useEffect(() => {
     if (editor && document && currentChapter && currentChapter !== lastChapterRef.current) {
       lastChapterRef.current = currentChapter;
@@ -72,7 +60,6 @@ const EditorLayout: React.FC = () => {
     }
   }, [currentChapter, document, editor, prefs.lineHeight]);
 
-  // Ctrl+S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -85,25 +72,19 @@ const EditorLayout: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [editor, saveDocument]);
 
-  // Flush save on unmount
   useEffect(() => {
     return () => { if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveDocument(editor?.getJSON()); } };
   }, []);
 
-  // Auto-scroll chat
-  useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
   const onResizeLeft = useCallback((d: number) => setLeftWidth((w) => Math.max(160, Math.min(500, w + d))), []);
   const onResizeRight = useCallback((d: number) => setRightWidth((w) => Math.max(240, Math.min(600, w - d))), []);
 
-  const hasConfig = configs.length > 0;
-
   return (
     <div className="editor-layout">
-      {/* ── Top bar ── */}
+      {/* Top bar */}
       <EditorToolbar editor={editor} />
 
-      {/* ── Middle three columns ── */}
+      {/* Middle: three columns */}
       <div className="editor-body">
         <div className="sidebar" style={{ width: leftWidth }}>
           <Sidebar />
@@ -124,30 +105,13 @@ const EditorLayout: React.FC = () => {
 
         <ResizeHandle onResize={onResizeRight} />
 
-        <div className="chat-panel" style={{ width: rightWidth }}>
-          <div className="chat-messages">
-            {!hasConfig ? (
-              <div className="chat-empty"><p>点击顶部 ⚙ 设置 API Key</p></div>
-            ) : messages.length === 0 ? (
-              <div className="chat-empty"><h2>AI 助手</h2><p>开始对话</p></div>
-            ) : (
-              messages.map((msg) => <ChatMessageBubble key={msg.id} message={msg} />)
-            )}
-            <div ref={chatBottomRef} />
-          </div>
-        </div>
+        <ChatPanel width={rightWidth} />
       </div>
 
-      {/* ── Bottom bar ── */}
+      {/* Bottom bar: word count + save status */}
       <div className="editor-bottombar">
-        <div className="bottombar-left">
-          <span className="bottombar-wordcount">字数：{wordCount.toLocaleString()}</span>
-          <span className="bottombar-status">{saveStatus || '就绪'}</span>
-        </div>
-        <div className="bottombar-right">
-          <ModelSwitcher />
-          <ChatInput onSend={send} disabled={streaming || !hasConfig} />
-        </div>
+        <span className="bottombar-wordcount">字数：{wordCount.toLocaleString()}</span>
+        <span className="bottombar-status">{saveStatus || '就绪'}</span>
       </div>
     </div>
   );
