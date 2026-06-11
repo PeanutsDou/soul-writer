@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-
-const safeApi = () => (window as any).api || {};
+import { invoke } from '@tauri-apps/api/core';
 
 interface Group {
   id: string;
@@ -37,6 +36,7 @@ interface DocumentState {
   createChapter: (name: string, groupId?: string) => Promise<void>;
   renameChapter: (oldName: string, newName: string) => Promise<void>;
   deleteChapter: (chapterName: string) => Promise<void>;
+  moveChapter: (chapterName: string, targetGroupId: string | null) => Promise<void>;
 }
 
 function countWords(doc: any): number {
@@ -60,16 +60,23 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   wordCount: 0,
   saveStatus: '',
 
-  setCurrentBook: (name) => set({ currentBook: name, currentChapter: null, document: null, meta: null, wordCount: 0 }),
-  setCurrentChapter: (name) => set({ currentChapter: name }),
+  setCurrentBook: (name) => {
+    try { localStorage.setItem('soul-writer-last-book', name || ''); } catch {}
+    set({ currentBook: name, currentChapter: null, document: null, meta: null, wordCount: 0 });
+  },
+  setCurrentChapter: (name) => {
+    try { localStorage.setItem('soul-writer-last-chapter', name || ''); } catch {}
+    // Clear document when switching chapters — prevents old content flash
+    set({ currentChapter: name, document: null, wordCount: 0, saveStatus: '' });
+  },
 
   loadMeta: async (bookName) => {
-    const meta = await safeApi().getBookMeta(bookName);
+    const meta = await invoke<BookMeta>('get_book_meta', { bookName });
     set({ meta });
   },
 
   loadDocument: async (bookName, chapterName) => {
-    const doc = await safeApi().getDocument(bookName, chapterName);
+    const doc = await invoke<any>('get_document', { bookName, chapterName });
     set({ document: doc, currentChapter: chapterName, wordCount: countWords(doc), saveStatus: '' });
   },
 
@@ -78,7 +85,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     if (!currentBook || !currentChapter) return;
     set({ saveStatus: '保存中...' });
     try {
-      await safeApi().saveDocument(currentBook, currentChapter, content);
+      await invoke('save_document', { bookName: currentBook, chapterName: currentChapter, content });
       set({ document: content, wordCount: countWords(content), saveStatus: '已保存' });
     } catch {
       set({ saveStatus: '保存失败' });
@@ -88,42 +95,42 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   createGroup: async (name) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().createGroup(currentBook, name);
+    await invoke('create_group', { bookName: currentBook, name });
     await get().loadMeta(currentBook);
   },
 
   renameGroup: async (oldName, newName) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().renameGroup(currentBook, oldName, newName);
+    await invoke('rename_group', { bookName: currentBook, oldName, newName });
     await get().loadMeta(currentBook);
   },
 
   deleteGroup: async (groupName) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().deleteGroup(currentBook, groupName);
+    await invoke('delete_group', { bookName: currentBook, groupName });
     await get().loadMeta(currentBook);
   },
 
   toggleGroup: async (groupName) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().toggleGroup(currentBook, groupName);
+    await invoke('toggle_group', { bookName: currentBook, groupName });
     await get().loadMeta(currentBook);
   },
 
   createChapter: async (name, groupId) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().createChapter(currentBook, name, groupId || undefined);
+    await invoke('create_chapter', { bookName: currentBook, name, groupId: groupId || null });
     await get().loadMeta(currentBook);
   },
 
   renameChapter: async (oldName, newName) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().renameChapter(currentBook, oldName, newName);
+    await invoke('rename_chapter', { bookName: currentBook, oldName, newName });
     await get().loadMeta(currentBook);
     if (get().currentChapter === oldName) {
       set({ currentChapter: newName });
@@ -133,10 +140,17 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   deleteChapter: async (chapterName) => {
     const { currentBook } = get();
     if (!currentBook) return;
-    await safeApi().deleteChapter(currentBook, chapterName);
+    await invoke('delete_chapter', { bookName: currentBook, chapterName });
     await get().loadMeta(currentBook);
     if (get().currentChapter === chapterName) {
       set({ currentChapter: null, document: null, wordCount: 0 });
     }
+  },
+
+  moveChapter: async (chapterName, targetGroupId) => {
+    const { currentBook } = get();
+    if (!currentBook) return;
+    await invoke('move_chapter', { bookName: currentBook, chapterName, targetGroupId });
+    await get().loadMeta(currentBook);
   },
 }));

@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-
-const api = () => (window as any).api || {};
+import { invoke } from '@tauri-apps/api/core';
 
 interface Book {
   id: string;
   name: string;
-  dirName: string;
+  dirName?: string;
   createdAt: string;
   updatedAt: string;
   chapterCount: number;
@@ -30,26 +29,25 @@ export const useBookStore = create<BookState>((set, get) => ({
   loadBooks: async () => {
     set({ loading: true, error: null });
     try {
-      if (!api().listBooks) throw new Error('API not available');
-      const books = await api().listBooks();
+      const books = await invoke<Book[]>('list_books');
       set({ books, loading: false });
     } catch (err: any) {
-      set({ loading: false, error: err.message || '加载失败' });
+      set({ loading: false, error: err?.toString() || '加载失败' });
     }
   },
 
   createBook: async (name: string) => {
-    await api().createBook(name);
+    await invoke('create_book', { name });
     await get().loadBooks();
   },
 
   deleteBook: async (name: string) => {
-    await api().deleteBook(name);
+    await invoke('delete_book', { name });
     await get().loadBooks();
   },
 
   renameBook: async (oldName: string, newName: string) => {
-    await api().renameBook(oldName, newName);
+    await invoke('rename_book', { oldName, newName });
     await get().loadBooks();
   },
 }));

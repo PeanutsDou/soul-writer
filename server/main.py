@@ -1,33 +1,107 @@
-"""FastAPI 入口"""
+"""
+Soul Writer Python backend — stdin/stdout JSON lines protocol.
+
+Protocol:
+  ← READY (on startup)
+  ← {"id": N, "method": "...", "params": {...}}
+  → {"id": N, "ok": true, "data": {...}}
+  → {"id": N, "ok": false, "error": "..."}
+"""
 import sys
+import json
 import os
-sys.path.insert(0, os.path.dirname(__file__))
+import traceback
+from store import Store
 
-from fastapi import FastAPI
-from storage.file_store import FileStore
-from api import books, documents, groups
+# Force UTF-8 for stdin/stdout pipes (Windows defaults to cp936)
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
-app = FastAPI(title="Soul Writer API", version="0.1.0")
-
-# 数据目录：从环境变量或默认路径
 DATA_DIR = os.environ.get("SOUL_WRITER_DATA", os.path.join(os.path.expanduser("~"), ".soul-writer"))
-store = FileStore(DATA_DIR)
-
-# 将 store 注入各路由模块
-books.store = store
-documents.store = store
-groups.store = store
-
-app.include_router(books.router, prefix="/api/books", tags=["books"])
-app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
-app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
+store = Store(DATA_DIR)
 
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "data_dir": DATA_DIR}
+def handle(method: str, params: dict):
+    if method == "list_books":
+        return store.list_books()
+    elif method == "create_book":
+        return store.create_book(params["name"])
+    elif method == "delete_book":
+        store.delete_book(params["name"])
+        return {"ok": True}
+    elif method == "rename_book":
+        store.rename_book(params["old_name"], params["new_name"])
+        return {"ok": True}
+    elif method == "get_book_meta":
+        return store.get_book_meta(params["book_name"])
+
+    elif method == "create_group":
+        return store.create_group(params["book_name"], params["name"])
+    elif method == "rename_group":
+        store.rename_group(params["book_name"], params["old_name"], params["new_name"])
+        return {"ok": True}
+    elif method == "delete_group":
+        store.delete_group(params["book_name"], params["group_name"])
+        return {"ok": True}
+    elif method == "toggle_group":
+        store.toggle_group(params["book_name"], params["group_name"])
+        return {"ok": True}
+
+    elif method == "create_chapter":
+        return {"name": store.create_chapter(
+            params["book_name"], params["name"],
+            params.get("group_id")
+        )}
+    elif method == "rename_chapter":
+        store.rename_chapter(params["book_name"], params["old_name"], params["new_name"])
+        return {"ok": True}
+    elif method == "delete_chapter":
+        store.delete_chapter(params["book_name"], params["chapter_name"])
+        return {"ok": True}
+    elif method == "move_chapter":
+        store.move_chapter(params["book_name"], params["chapter_name"], params.get("target_group_id"))
+        return {"ok": True}
+
+    elif method == "get_document":
+        return store.get_document(params["book_name"], params["chapter_name"])
+    elif method == "save_document":
+        store.save_document(params["book_name"], params["chapter_name"], params["content"])
+        return {"ok": True}
+
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+
+def main():
+    # Signal ready
+    sys.stdout.write("READY\n")
+    sys.stdout.flush()
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+
+        try:
+            req = json.loads(line)
+            req_id = req["id"]
+            method = req["method"]
+            params = req.get("params", {})
+        except (KeyError, json.JSONDecodeError) as e:
+            resp = {"id": 0, "ok": False, "error": f"Invalid request: {e}"}
+        else:
+            try:
+                data = handle(method, params)
+                resp = {"id": req_id, "ok": True, "data": data}
+            except Exception as e:
+                traceback.print_exc(file=sys.stderr)
+                resp = {"id": req_id, "ok": False, "error": str(e)}
+
+        sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", 8720)))
+    main()

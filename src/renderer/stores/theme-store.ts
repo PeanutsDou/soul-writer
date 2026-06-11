@@ -1,5 +1,25 @@
 import { create } from 'zustand';
-import type { ThemeMode } from '../theme-schemes';
+
+type ThemeMode = 'light' | 'dark';
+
+function loadTheme(): ThemeMode {
+  try {
+    const saved = localStorage.getItem('soul-writer-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+  } catch {}
+  return 'light';
+}
+
+function saveTheme(mode: ThemeMode) {
+  try {
+    localStorage.setItem('soul-writer-theme', mode);
+  } catch {}
+}
+
+const initialMode = loadTheme();
+
+// Apply theme immediately to prevent flash
+document.documentElement.setAttribute('data-theme', initialMode);
 
 interface ThemeState {
   mode: ThemeMode;
@@ -8,7 +28,17 @@ interface ThemeState {
 }
 
 export const useThemeStore = create<ThemeState>((set) => ({
-  mode: 'light',
-  toggle: () => set((s) => ({ mode: s.mode === 'light' ? 'dark' : 'light' })),
-  setMode: (mode) => set({ mode }),
+  mode: initialMode,
+  toggle: () =>
+    set((s) => {
+      const next = s.mode === 'light' ? 'dark' : 'light';
+      saveTheme(next);
+      return { mode: next };
+    }),
+  setMode: (mode) => {
+    saveTheme(mode);
+    set({ mode });
+  },
 }));
+
+export type { ThemeMode };

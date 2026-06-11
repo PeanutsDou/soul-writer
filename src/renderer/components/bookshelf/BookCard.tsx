@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 
 interface Book {
   id: string;
@@ -17,30 +17,26 @@ interface Props {
 }
 
 const BookCard: React.FC<Props> = ({ book, onOpen, onRename, onDelete, formatTime }) => {
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+
+  const handleMenu = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const closeMenu = useCallback(() => setMenuPos(null), []);
+
   return (
     <div className="book-card" onClick={onOpen}>
-      <button
-        className="book-card-menu"
-        onClick={(e) => {
-          e.stopPropagation();
-          // Show context menu
-          const menu = document.createElement('div');
-          menu.className = 'ctx-menu';
-          menu.style.left = e.clientX + 'px';
-          menu.style.top = e.clientY + 'px';
-          menu.innerHTML = `
-            <button class="ctx-menu-item">重命名</button>
-            <button class="ctx-menu-item danger">删除</button>
-          `;
-          document.body.appendChild(menu);
-          const close = () => { menu.remove(); document.removeEventListener('click', close); };
-          menu.querySelector('.ctx-menu-item')?.addEventListener('click', () => { close(); onRename(); });
-          menu.querySelector('.ctx-menu-item.danger')?.addEventListener('click', () => { close(); onDelete(); });
-          setTimeout(() => document.addEventListener('click', close), 0);
-        }}
-      >
-        ⋯
-      </button>
+      <div className="book-card-actions">
+        <button className="book-card-menu" onClick={handleMenu} title="更多">⋯</button>
+        <button
+          className="book-card-delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          title="删除书籍"
+        >×</button>
+      </div>
       <div className="book-card-icon">📖</div>
       <div className="book-card-name">{book.name}</div>
       <div className="book-card-meta">
@@ -48,6 +44,15 @@ const BookCard: React.FC<Props> = ({ book, onOpen, onRename, onDelete, formatTim
         <span>{book.totalWords.toLocaleString()} 字</span>
       </div>
       <div className="book-card-time">{formatTime(book.updatedAt)}</div>
+
+      {menuPos && (
+        <div className="ctx-menu-overlay" onClick={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu(); }}>
+          <div className="ctx-menu" style={{ left: menuPos.x, top: menuPos.y }}>
+            <button className="ctx-menu-item" onClick={() => { closeMenu(); onRename(); }}>重命名</button>
+            <button className="ctx-menu-item danger" onClick={() => { closeMenu(); onDelete(); }}>删除</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

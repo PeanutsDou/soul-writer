@@ -1,3 +1,0 @@
-
-[Python] INFO:     127.0.0.1:59422 - "GET /api/health HTTP/1.1" 200 OK
-[Python] Backend ready on port 8720

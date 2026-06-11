@@ -221,26 +221,37 @@ html, body {
   color: var(--text-muted);
 }
 
-.book-card-menu {
+.book-card-actions {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.book-card:hover .book-card-actions {
+  opacity: 1;
+}
+
+.book-card-menu,
+.book-card-delete {
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-size: 16px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.book-card:hover .book-card-menu {
-  opacity: 1;
+  line-height: 1;
 }
 .book-card-menu:hover {
   background: var(--bg-surface);
   color: var(--text-primary);
+}
+.book-card-delete:hover {
+  background: var(--error);
+  color: #fff;
 }
 
 .book-card-add {
@@ -373,10 +384,12 @@ html, body {
   align-items: center;
   gap: 6px;
   padding: 5px 14px 5px 32px;
-  cursor: pointer;
+  cursor: default;
   color: var(--text-secondary);
   font-size: 13px;
   transition: background 0.1s;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .doc-chapter:hover {
   background: var(--bg-hover);
@@ -400,6 +413,22 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Drag and drop */
+.doc-chapter.dragging {
+  opacity: 0.3;
+}
+.drag-ghost {
+  cursor: grabbing !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.doc-group-header.drag-over {
+  background: var(--bg-hover);
+  outline: 2px dashed var(--accent-dim);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 
 /* Sidebar footer */
@@ -436,6 +465,17 @@ html, body {
   min-width: 0;
   overflow: hidden;
   background: var(--bg-primary);
+}
+
+.editor-doc-title {
+  padding: 10px 60px 4px;
+  flex-shrink: 0;
+}
+.editor-doc-title-text {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--text-primary);
+  letter-spacing: 1px;
 }
 
 .editor-empty {

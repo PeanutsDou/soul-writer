@@ -40,8 +40,7 @@ const EditorToolbar: React.FC<Props> = ({ editor }) => {
   const setFontSize = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (!editor || !val) return;
-    // Use style attribute for font size
-    editor.chain().focus().setMark('textStyle', { fontSize: val + 'px' }).run();
+    editor.chain().focus().setFontSize(val + 'px').run();
   }, [editor]);
 
   const setColor = useCallback((color: string) => {
@@ -52,7 +51,7 @@ const EditorToolbar: React.FC<Props> = ({ editor }) => {
 
   if (!editor) return null;
 
-  const activeFontSize = editor.getAttributes('textStyle').fontSize?.replace('px', '') || '16';
+  const activeFontSize = (editor.getAttributes('textStyle').fontSize || '16').replace('px', '');
 
   return (
     <div className="editor-toolbar">

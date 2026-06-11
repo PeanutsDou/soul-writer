@@ -6,6 +6,8 @@ import TextStyle from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
+import FontFamily from '@tiptap/extension-font-family';
+import FontSize from '../../extensions/FontSize';
 import { useDocumentStore } from '../../stores/document-store';
 import EditorToolbar from './EditorToolbar';
 
@@ -16,7 +18,7 @@ const EditorPanel: React.FC = () => {
   } = useDocumentStore();
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isNewDoc = useRef(false);
+  const lastChapterRef = useRef<string | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -28,13 +30,14 @@ const EditorPanel: React.FC = () => {
       }),
       Underline,
       TextStyle,
+      FontFamily,
+      FontSize,
       Color,
       TextAlign.configure({ types: ['paragraph'] }),
       Placeholder.configure({ placeholder: '开始写作...' }),
     ],
     content: null,
     onUpdate: ({ editor }) => {
-      // Debounced auto-save
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         saveDocument(editor.getJSON());
@@ -42,23 +45,25 @@ const EditorPanel: React.FC = () => {
     },
   });
 
-  // Load document when chapter changes
+  // Load document content when a new chapter is selected
   useEffect(() => {
-    if (editor && document) {
-      isNewDoc.current = true;
+    if (editor && document && currentChapter && currentChapter !== lastChapterRef.current) {
+      lastChapterRef.current = currentChapter;
       editor.commands.setContent(document);
-      // Set cursor to end for new documents
       setTimeout(() => {
         editor.commands.focus('end');
-        isNewDoc.current = false;
       }, 50);
     }
-  }, [currentChapter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentChapter, document, editor]);
 
-  // Cleanup timer
+  // Cleanup timer and save on unmount (app close)
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        // Flush pending save immediately before unmount
+        saveDocument(editor?.getJSON());
+      }
     };
   }, []);
 
@@ -75,6 +80,9 @@ const EditorPanel: React.FC = () => {
   return (
     <div className="editor-panel">
       <EditorToolbar editor={editor} />
+      <div className="editor-doc-title">
+        <span className="editor-doc-title-text">{currentChapter}</span>
+      </div>
       <div className="editor-content">
         <EditorContent editor={editor} />
       </div>
