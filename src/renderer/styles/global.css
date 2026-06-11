@@ -9,7 +9,7 @@
   --bg-secondary: #f3f3f3;
   --bg-surface: #ebebeb;
   --bg-hover: #e0e0e0;
-  --border: #d5d5d5;
+  --border: #c5c5c5;
   --text-primary: #1a1a1a;
   --text-secondary: #555555;
   --text-muted: #999999;
@@ -28,7 +28,7 @@
   --bg-secondary: #1e1e1e;
   --bg-surface: #2a2a2a;
   --bg-hover: #363636;
-  --border: #3a3a3a;
+  --border: #4a4a4a;
   --text-primary: #e8e8e8;
   --text-secondary: #b0b0b0;
   --text-muted: #6a6a6a;
@@ -313,6 +313,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-right: 1px solid var(--border);
 }
 
 .sidebar-header {
@@ -804,6 +805,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-left: 1px solid var(--border);
 }
 
 .chat-messages {
