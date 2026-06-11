@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useThemeStore } from '../stores/theme-store';
 import { useDocumentStore } from '../stores/document-store';
 import { invoke } from '@tauri-apps/api/core';
+import SettingsPanel from './settings/SettingsPanel';
 
 const AppTitleBar: React.FC = () => {
   const toggleTheme = useThemeStore((s) => s.toggle);
   const theme = useThemeStore((s) => s.mode);
   const currentBook = useDocumentStore((s) => s.currentBook);
   const setCurrentBook = useDocumentStore((s) => s.setCurrentBook);
+  const [showSettings, setShowSettings] = useState(false);
 
   const minimize = () => invoke('minimize_window').catch(() => {});
   const maximize = () => invoke('maximize_window').catch(() => {});
@@ -26,6 +28,9 @@ const AppTitleBar: React.FC = () => {
         </span>
       </div>
       <div className="title-bar-right">
+        <button className="title-bar-btn" onClick={() => setShowSettings(true)} title="设置">
+          ⚙
+        </button>
         <button className="title-bar-btn" onClick={toggleTheme} title="切换主题">
           {theme === 'light' ? '◑' : '◐'}
         </button>
@@ -35,6 +40,7 @@ const AppTitleBar: React.FC = () => {
           <button className="window-btn close" onClick={close}>×</button>
         </div>
       </div>
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </div>
   );
 };

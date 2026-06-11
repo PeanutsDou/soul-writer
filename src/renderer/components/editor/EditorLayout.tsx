@@ -1,6 +1,7 @@
 import React from 'react';
 import Sidebar from './Sidebar';
 import EditorPanel from './EditorPanel';
+import ChatPanel from '../ai/ChatPanel';
 
 const EditorLayout: React.FC = () => {
   return (
@@ -8,6 +9,7 @@ const EditorLayout: React.FC = () => {
       <div className="editor-body">
         <Sidebar />
         <EditorPanel />
+        <ChatPanel />
       </div>
     </div>
   );

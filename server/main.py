@@ -4,13 +4,17 @@ Soul Writer Python backend — stdin/stdout JSON lines protocol.
 Protocol:
   ← READY (on startup)
   ← {"id": N, "method": "...", "params": {...}}
-  → {"id": N, "ok": true, "data": {...}}
+  → {"id": N, "ok": true, "data": {...}}          (normal)
+  → {"type":"stream_start","id":N,...}
+  → {"type":"stream_chunk","id":N,"content":"..."}
+  → {"type":"stream_end","id":N}
   → {"id": N, "ok": false, "error": "..."}
 """
 import sys
 import json
 import os
 import traceback
+import uuid
 from store import Store
 
 # Force UTF-8 for stdin/stdout pipes (Windows defaults to cp936)
@@ -21,6 +25,33 @@ if hasattr(sys.stdout, "reconfigure"):
 
 DATA_DIR = os.environ.get("SOUL_WRITER_DATA", os.path.join(os.path.expanduser("~"), ".soul-writer"))
 store = Store(DATA_DIR)
+
+# ── Model configs ──
+CONFIGS_PATH = os.path.join(DATA_DIR, "model_configs.json")
+
+def load_model_configs() -> list:
+    if not os.path.exists(CONFIGS_PATH):
+        return []
+    with open(CONFIGS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_model_configs(configs: list):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(CONFIGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(configs, f, ensure_ascii=False, indent=2)
+
+# ── AI Agent (lazy init, one per session) ──
+_agents = {}  # stream_id -> Agent
+
+def _get_or_create_agent(config: dict, system_prompt: str = ""):
+    from ai.llm_client import LLMClient
+    from ai.agent import Agent
+    llm = LLMClient(
+        base_url=config.get("url", "https://api.openai.com/v1"),
+        api_key=config.get("api_key", ""),
+        model=config.get("model", "gpt-3.5-turbo"),
+    )
+    return Agent(llm, system_prompt)
 
 
 def handle(method: str, params: dict):
@@ -66,7 +97,6 @@ def handle(method: str, params: dict):
 
     elif method == "get_document":
         doc = store.get_document(params["book_name"], params["chapter_name"])
-        # Include authoritative character count
         texts = []
         def walk(n):
             if isinstance(n, dict):
@@ -80,9 +110,9 @@ def handle(method: str, params: dict):
         walk(doc)
         doc["_count"] = sum(len(t) for t in texts)
         return doc
+
     elif method == "save_document":
         content = params["content"]
-        # Debug: extract all text to stderr
         texts = []
         def walk(n):
             if isinstance(n, dict):
@@ -94,11 +124,63 @@ def handle(method: str, params: dict):
                 for item in n:
                     walk(item)
         walk(content)
-        import sys
         total = sum(len(t) for t in texts)
-        print(f"[DEBUG] texts={texts!r}, total_chars={total}", file=sys.stderr, flush=True)
         store.save_document(params["book_name"], params["chapter_name"], content)
         return {"ok": True, "debug_count": total}
+
+    # ── Model config methods ──
+    elif method == "get_model_configs":
+        return {"configs": load_model_configs()}
+
+    elif method == "save_model_configs":
+        save_model_configs(params["configs"])
+        return {"ok": True}
+
+    # ── AI Chat (streaming handled specially in main loop) ──
+    elif method == "chat":
+        # This method returns immediately — streaming happens via stdout
+        # The caller (Rust) reads subsequent stream_chunk/stream_end lines
+        config = params.get("config", {})
+        message = params.get("message", "")
+        system_prompt = params.get("system_prompt", "")
+
+        if not config.get("api_key"):
+            raise ValueError("请先在设置中配置 API Key")
+
+        agent = _get_or_create_agent(config, system_prompt)
+
+        # Signal stream start
+        sys.stdout.write(json.dumps({"type": "stream_start"}, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+        try:
+            for token in agent.chat(message):
+                sys.stdout.write(json.dumps({
+                    "type": "stream_chunk",
+                    "content": token,
+                }, ensure_ascii=False) + "\n")
+                sys.stdout.flush()
+        except Exception as e:
+            sys.stdout.write(json.dumps({
+                "type": "stream_error",
+                "error": str(e),
+            }, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+            return {"ok": False, "error": str(e)}
+
+        # Signal stream end
+        sys.stdout.write(json.dumps({"type": "stream_end"}, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+        # Return a final response (Rust uses this to confirm completion)
+        return {"ok": True}
+
+    elif method == "reset_agent":
+        # Clear conversation history for fresh context
+        config = params.get("config", {})
+        agent = _get_or_create_agent(config)
+        agent.reset()
+        return {"ok": True}
 
     else:
         raise ValueError(f"Unknown method: {method}")
@@ -121,13 +203,16 @@ def main():
             params = req.get("params", {})
         except (KeyError, json.JSONDecodeError) as e:
             resp = {"id": 0, "ok": False, "error": f"Invalid request: {e}"}
-        else:
-            try:
-                data = handle(method, params)
-                resp = {"id": req_id, "ok": True, "data": data}
-            except Exception as e:
-                traceback.print_exc(file=sys.stderr)
-                resp = {"id": req_id, "ok": False, "error": str(e)}
+            sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+            continue
+
+        try:
+            data = handle(method, params)
+            resp = {"id": req_id, "ok": True, "data": data}
+        except Exception as e:
+            traceback.print_exc(file=sys.stderr)
+            resp = {"id": req_id, "ok": False, "error": str(e)}
 
         sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
         sys.stdout.flush()

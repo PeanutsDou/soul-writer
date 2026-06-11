@@ -1,9 +1,9 @@
 mod python_bridge;
 
-use python_bridge::PythonBridge;
+use python_bridge::{PythonBridge, StreamEvent};
 use serde_json::{json, Value};
 use std::sync::Mutex;
-use tauri::{Manager, Window};
+use tauri::{Emitter, Manager, Window};
 
 struct AppState {
     py: Mutex<Option<PythonBridge>>,
@@ -105,6 +105,49 @@ fn get_document(book_name: String, chapter_name: String, state: tauri::State<App
 fn save_document(book_name: String, chapter_name: String, content: Value, state: tauri::State<AppState>) -> Result<Value, String> {
     let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
     guard.as_ref().ok_or("Python not started")?.call("save_document", json!({ "book_name": book_name, "chapter_name": chapter_name, "content": content }))
+}
+
+// ── AI ──
+
+#[tauri::command]
+fn get_model_configs(state: tauri::State<AppState>) -> Result<Value, String> {
+    let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
+    guard.as_ref().ok_or("Python not started")?.call("get_model_configs", json!({}))
+}
+
+#[tauri::command]
+fn save_model_configs(configs: Value, state: tauri::State<AppState>) -> Result<Value, String> {
+    let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
+    guard.as_ref().ok_or("Python not started")?.call("save_model_configs", json!({ "configs": configs }))
+}
+
+#[tauri::command]
+fn chat(message: String, config: Value, app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<Value, String> {
+    let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
+    let py = guard.as_ref().ok_or("Python not started")?;
+
+    // call_streaming blocks, but that's fine — Tauri commands run on a thread pool
+    py.call_streaming(
+        "chat",
+        json!({ "message": message, "config": config }),
+        |event| match event {
+            StreamEvent::Chunk(content) => {
+                let _ = app.emit("chat:chunk", json!({ "content": content }));
+            }
+            StreamEvent::Error(error) => {
+                let _ = app.emit("chat:error", json!({ "error": error }));
+            }
+            StreamEvent::Done => {
+                let _ = app.emit("chat:done", json!({}));
+            }
+        },
+    )
+}
+
+#[tauri::command]
+fn reset_agent(state: tauri::State<AppState>) -> Result<Value, String> {
+    let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
+    guard.as_ref().ok_or("Python not started")?.call("reset_agent", json!({}))
 }
 
 // ── Window controls (native Tauri) ──
@@ -257,6 +300,10 @@ pub fn run() {
             move_chapter,
             get_document,
             save_document,
+            get_model_configs,
+            save_model_configs,
+            chat,
+            reset_agent,
             minimize_window,
             maximize_window,
             close_window,

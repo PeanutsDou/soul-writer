@@ -26,7 +26,25 @@ struct Response {
     error: String,
 }
 
-/// Manages Python sidecar process and JSON-lines communication.
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+enum StreamLine {
+    #[serde(rename = "stream_start")]
+    Start,
+    #[serde(rename = "stream_chunk")]
+    Chunk { content: String },
+    #[serde(rename = "stream_error")]
+    StreamError { error: String },
+    #[serde(rename = "stream_end")]
+    End,
+}
+
+pub enum StreamEvent {
+    Chunk(String),
+    Error(String),
+    Done,
+}
+
 pub struct PythonBridge {
     child: Mutex<Child>,
     stdin: Mutex<ChildStdin>,
@@ -34,10 +52,7 @@ pub struct PythonBridge {
 }
 
 impl PythonBridge {
-    /// Spawn the Python sidecar and wait for READY signal.
     pub fn start(data_dir: &str) -> Result<Self, String> {
-        // Resolve server directory: try CWD-relative first (dev mode),
-        // then fall back to exe-relative (shortcut / bundled launch).
         let exe_dir = std::env::current_exe()
             .map_err(|e| format!("exe path: {e}"))?
             .parent()
@@ -45,10 +60,10 @@ impl PythonBridge {
             .to_path_buf();
 
         let candidates = vec![
-            std::env::current_dir().unwrap_or_default().join("../server"),  // from src-tauri/ (cargo tauri dev)
-            std::env::current_dir().unwrap_or_default().join("server"),    // from project root
-            exe_dir.join("../../../server"),  // from target/debug/ (direct exe launch)
-            exe_dir.join("../../server"),     // from target/release/
+            std::env::current_dir().unwrap_or_default().join("../server"),
+            std::env::current_dir().unwrap_or_default().join("server"),
+            exe_dir.join("../../../server"),
+            exe_dir.join("../../server"),
         ];
 
         let server_dir = candidates
@@ -74,7 +89,6 @@ impl PythonBridge {
         let stdout = child.stdout.take().ok_or("No stdout")?;
         let stderr = child.stderr.take().ok_or("No stderr")?;
 
-        // Spawn a thread to log Python stderr
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
@@ -88,7 +102,6 @@ impl PythonBridge {
 
         let mut reader = BufReader::new(stdout);
 
-        // Read startup READY signal
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -107,41 +120,74 @@ impl PythonBridge {
         })
     }
 
-    /// Call a method on the Python backend. Blocks until response.
-    pub fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+    /// Streaming call: writes request, reads stream lines + final response.
+    pub fn call_streaming<F>(&self, method: &str, params: Value, mut on_event: F) -> Result<Value, String>
+    where
+        F: FnMut(StreamEvent),
+    {
         let id = rand_id();
-
-        let req = Request {
-            id,
-            method: method.to_string(),
-            params,
-        };
+        let req = Request { id, method: method.to_string(), params };
         let json = serde_json::to_string(&req).map_err(|e| format!("JSON: {e}"))?;
 
-        // Write request to stdin
         {
             let mut stdin = self.stdin.lock().map_err(|e| format!("Lock: {e}"))?;
             writeln!(stdin, "{}", json).map_err(|e| format!("Write: {e}"))?;
             stdin.flush().map_err(|e| format!("Flush: {e}"))?;
         }
 
-        // Read response from stdout
+        loop {
+            let mut line = String::new();
+            {
+                let mut reader = self.stdout.lock().map_err(|e| format!("Lock: {e}"))?;
+                reader.read_line(&mut line).map_err(|e| format!("Read: {e}"))?;
+            }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() { continue; }
+
+            // Try stream line first
+            if let Ok(sl) = serde_json::from_str::<StreamLine>(trimmed) {
+                match sl {
+                    StreamLine::Start => {}
+                    StreamLine::Chunk { content } => on_event(StreamEvent::Chunk(content)),
+                    StreamLine::StreamError { error } => {
+                        on_event(StreamEvent::Error(error.clone()));
+                        return Err(error);
+                    }
+                    StreamLine::End => on_event(StreamEvent::Done),
+                }
+                continue;
+            }
+
+            // Try final response
+            if let Ok(resp) = serde_json::from_str::<Response>(trimmed) {
+                return if resp.ok { Ok(resp.data) } else { Err(resp.error) };
+            }
+
+            log::warn!("[Python] Unknown line: {}", trimmed);
+        }
+    }
+
+    /// Normal call: one request → one response.
+    pub fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+        let id = rand_id();
+        let req = Request { id, method: method.to_string(), params };
+        let json = serde_json::to_string(&req).map_err(|e| format!("JSON: {e}"))?;
+
+        {
+            let mut stdin = self.stdin.lock().map_err(|e| format!("Lock: {e}"))?;
+            writeln!(stdin, "{}", json).map_err(|e| format!("Write: {e}"))?;
+            stdin.flush().map_err(|e| format!("Flush: {e}"))?;
+        }
+
         let mut line = String::new();
         {
             let mut reader = self.stdout.lock().map_err(|e| format!("Lock: {e}"))?;
-            reader
-                .read_line(&mut line)
-                .map_err(|e| format!("Read response: {e}"))?;
+            reader.read_line(&mut line).map_err(|e| format!("Read: {e}"))?;
         }
 
-        let resp: Response =
-            serde_json::from_str(&line).map_err(|e| format!("Parse response: {e} ({line})"))?;
-
-        if resp.ok {
-            Ok(resp.data)
-        } else {
-            Err(resp.error)
-        }
+        let resp: Response = serde_json::from_str(&line).map_err(|e| format!("Parse: {e} ({line})"))?;
+        if resp.ok { Ok(resp.data) } else { Err(resp.error) }
     }
 }
 
@@ -154,8 +200,5 @@ impl Drop for PythonBridge {
 }
 
 fn rand_id() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_micros() as u64
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u64
 }
