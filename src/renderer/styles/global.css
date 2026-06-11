@@ -909,9 +909,21 @@ html, body {
 }
 
 .chat-input-area {
-  padding: 4px 14px 12px;
+  padding: 0 14px 12px;
   display: flex;
   flex-direction: column;
+}
+
+.input-resize-handle {
+  height: 4px;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  background: transparent;
+  transition: background 0.15s;
+  margin-bottom: 4px;
+}
+.input-resize-handle:hover {
+  background: var(--border);
 }
 
 .chat-input-wrapper {
@@ -978,18 +990,24 @@ html, body {
 }
 
 .model-select {
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 6px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 2px 2px 2px 4px;
   font-size: 11px;
   font-family: var(--font-sans);
   cursor: pointer;
   outline: none;
+  transition: border-color 0.15s, color 0.15s;
 }
-.model-select:hover { border-color: var(--accent-dim); }
-.model-select:focus { border-color: var(--accent-dim); }
+.model-select:hover {
+  color: var(--text-secondary);
+  border-bottom-color: var(--text-muted);
+}
+.model-select:focus {
+  border-bottom-color: var(--accent-dim);
+}
 
 /* Settings Panel */
 .settings-panel {
