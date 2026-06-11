@@ -12,19 +12,15 @@ const ModelSwitcher: React.FC = () => {
   const current = configs.find((c) => c.id === selectedId) || configs[0];
 
   return (
-    <div className="model-switcher">
-      <select
-        className="model-select"
-        value={current?.id || ''}
-        onChange={(e) => setConfig(e.target.value)}
-      >
-        {configs.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name} · {c.model}
-          </option>
-        ))}
-      </select>
-    </div>
+    <select
+      className="model-select-inline"
+      value={current?.id || ''}
+      onChange={(e) => setConfig(e.target.value)}
+    >
+      {configs.map((c) => (
+        <option key={c.id} value={c.id}>{c.name} · {c.model}</option>
+      ))}
+    </select>
   );
 };
 
