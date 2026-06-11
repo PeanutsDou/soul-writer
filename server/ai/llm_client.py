@@ -24,9 +24,6 @@ class LLMClient:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> dict:
-        """
-        Non-streaming chat completion. Returns full response with optional tool_calls.
-        """
         url = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -40,6 +37,10 @@ class LLMClient:
         }
         if tools:
             payload["tools"] = tools
+
+        # DeepSeek: disable thinking mode when using tools (not compatible)
+        if "deepseek" in self.model.lower():
+            payload["thinking"] = {"type": "disabled"}
 
         try:
             response = self._client.post(url, json=payload, headers=headers)
