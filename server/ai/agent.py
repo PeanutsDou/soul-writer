@@ -63,11 +63,18 @@ class Agent:
                     full_messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
                 continue
 
-            # No tool calls — stream the text response
+            # No tool calls — get text response
             content = response.get("content", "") or ""
+
+            # If content is empty after tool calls, force a text response
+            if not content and self.messages and any(m.get("role") == "tool" for m in full_messages):
+                full_messages.append({"role": "user", "content": "请根据以上工具返回的结果，用自然语言回答用户。"})
+                resp2 = self.llm.chat(full_messages)
+                content = resp2.get("content", "") or ""
+
             if content:
                 yield {"type": "chunk", "content": content}
-            self.messages.append({"role": "assistant", "content": content})
+            self.messages.append({"role": "assistant", "content": content or "(无回复)"})
 
             if len(self.messages) > 40:
                 self.messages = self.messages[-40:]
