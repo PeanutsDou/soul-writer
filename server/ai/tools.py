@@ -4,6 +4,7 @@ Agent tools for document manipulation.
 import json
 from typing import Optional
 
+from ai.novel_browser import SERVICE as novel_browser, read_writing_reference, search_knowledge_base
 from store import Store
 
 store: Optional[Store] = None
@@ -28,6 +29,13 @@ TOOLS = [
     {"type": "function", "function": {"name": "create_group", "description": "新建分组", "parameters": {"type": "object", "properties": {"book_name": {"type": "string"}, "group_name": {"type": "string"}}, "required": ["book_name", "group_name"]}}},
     {"type": "function", "function": {"name": "rename_group", "description": "重命名分组", "parameters": {"type": "object", "properties": {"book_name": {"type": "string"}, "old_name": {"type": "string"}, "new_name": {"type": "string"}}, "required": ["book_name", "old_name", "new_name"]}}},
     {"type": "function", "function": {"name": "move_chapter_to_group", "description": "将章节移动到指定分组。group_name 为 null 则移动到未分组", "parameters": {"type": "object", "properties": {"book_name": {"type": "string"}, "chapter_name": {"type": "string"}, "group_name": {"description": "目标分组名，或 null"}}, "required": ["book_name", "chapter_name"]}}},
+    {"type": "function", "function": {"name": "novel_search", "description": "使用 Playwright 浏览器在指定小说站搜索书籍。站点不会自动降级或切换。", "parameters": {"type": "object", "properties": {"keyword": {"type": "string", "description": "书名或搜索词"}, "source": {"type": "string", "enum": ["qidian", "qidiantu", "xsdi"], "description": "数据源：起点、起点图或 xsdi"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}}, "required": ["keyword", "source"]}}},
+    {"type": "function", "function": {"name": "novel_book_info", "description": "使用 Playwright 打开小说详情页，返回页面中的书籍信息。", "parameters": {"type": "object", "properties": {"source": {"type": "string", "enum": ["qidian", "qidiantu", "xsdi"]}, "book_id": {"type": "string", "description": "纯数字书籍 ID"}}, "required": ["source", "book_id"]}}},
+    {"type": "function", "function": {"name": "novel_catalog", "description": "使用 Playwright 获取小说目录。起点目录同时返回免费标记。", "parameters": {"type": "object", "properties": {"source": {"type": "string", "enum": ["qidian", "xsdi"]}, "book_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}, "order": {"type": "string", "enum": ["asc", "desc"]}}, "required": ["source", "book_id"]}}},
+    {"type": "function", "function": {"name": "novel_read_chapter", "description": "使用 Playwright 读取章节正文。起点仅允许读取目录明确标记为免费的章节，不读取付费内容。", "parameters": {"type": "object", "properties": {"source": {"type": "string", "enum": ["qidian", "xsdi"]}, "book_id": {"type": "string"}, "chapter_id": {"type": "string"}, "max_chars": {"type": "integer", "minimum": 500, "maximum": 30000}}, "required": ["source", "book_id", "chapter_id"]}}},
+    {"type": "function", "function": {"name": "qidian_rankings", "description": "使用 Playwright 查询起点图首订榜单和新书数据，可按月或按日查询。", "parameters": {"type": "object", "properties": {"period": {"type": "string", "description": "留空查最新，或填写 YYYY-MM / YYYY-MM-DD"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}}},
+    {"type": "function", "function": {"name": "novel_writing_reference", "description": "读取内置 novel-writing 指南，以及文风、爽点、剧情结构或全文检索知识。", "parameters": {"type": "object", "properties": {"topic": {"type": "string", "enum": ["guide", "style", "gratification", "plot", "fulltext"]}, "query": {"type": "string", "description": "可选关键词；填写后只返回相关章节"}, "max_chars": {"type": "integer", "minimum": 1000, "maximum": 40000}}, "required": ["topic"]}}},
+    {"type": "function", "function": {"name": "novel_knowledge_search", "description": "搜索本地 better writer/knowledge_base 中已分析小说的结构化档案、章节索引和研究资料。", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "题材、书名、人物、爽点或结构关键词"}, "limit": {"type": "integer", "minimum": 1, "maximum": 30}}, "required": ["query"]}}},
 ]
 
 
@@ -81,6 +89,21 @@ def text_to_paragraphs(text: str) -> list[dict]:
 
 def execute_tool(name: str, args: dict) -> str:
     try:
+        if name == "novel_search":
+            return novel_browser.search(args["keyword"], args["source"], args.get("limit", 10))
+        if name == "novel_book_info":
+            return novel_browser.book_info(args["source"], args["book_id"])
+        if name == "novel_catalog":
+            return novel_browser.catalog(args["source"], args["book_id"], args.get("limit", 100), args.get("order", "asc"))
+        if name == "novel_read_chapter":
+            return novel_browser.read_chapter(args["source"], args["book_id"], args["chapter_id"], args.get("max_chars", 20_000))
+        if name == "qidian_rankings":
+            return novel_browser.rankings(args.get("period", ""), args.get("limit", 20))
+        if name == "novel_writing_reference":
+            return read_writing_reference(args["topic"], args.get("query", ""), args.get("max_chars", 20_000))
+        if name == "novel_knowledge_search":
+            return search_knowledge_base(args["query"], args.get("limit", 10))
+
         s = _require_store()
 
         if name == "read_chapter":

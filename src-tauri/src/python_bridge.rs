@@ -64,10 +64,11 @@ pub struct PythonBridge {
     child: Mutex<Child>,
     stdin: Mutex<ChildStdin>,
     stdout: Mutex<BufReader<ChildStdout>>,
+    request_lock: Mutex<()>,
 }
 
 impl PythonBridge {
-    pub fn start(data_dir: &str) -> Result<Self, String> {
+    pub fn start(data_dir: &str, resource_dir: &str) -> Result<Self, String> {
         let exe_dir = std::env::current_exe()
             .map_err(|e| format!("exe path: {e}"))?
             .parent()
@@ -75,6 +76,7 @@ impl PythonBridge {
             .to_path_buf();
 
         let candidates = vec![
+            std::path::PathBuf::from(resource_dir).join("server"),
             std::env::current_dir().unwrap_or_default().join("../server"),
             std::env::current_dir().unwrap_or_default().join("server"),
             exe_dir.join("../../../server"),
@@ -92,6 +94,7 @@ impl PythonBridge {
             .arg("main.py")
             .current_dir(server_dir)
             .env("SOUL_WRITER_DATA", data_dir)
+            .env("SOUL_WRITER_RESOURCES", resource_dir)
             .env("PYTHONIOENCODING", "utf-8")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -132,6 +135,7 @@ impl PythonBridge {
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),
             stdout: Mutex::new(reader),
+            request_lock: Mutex::new(()),
         })
     }
 
@@ -140,6 +144,7 @@ impl PythonBridge {
     where
         F: FnMut(StreamEvent),
     {
+        let _request_guard = self.request_lock.lock().map_err(|e| format!("Lock: {e}"))?;
         let id = rand_id();
         let req = Request { id, method: method.to_string(), params };
         let json = serde_json::to_string(&req).map_err(|e| format!("JSON: {e}"))?;
@@ -197,6 +202,7 @@ impl PythonBridge {
 
     /// Normal call: one request → one response.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+        let _request_guard = self.request_lock.lock().map_err(|e| format!("Lock: {e}"))?;
         let id = rand_id();
         let req = Request { id, method: method.to_string(), params };
         let json = serde_json::to_string(&req).map_err(|e| format!("JSON: {e}"))?;

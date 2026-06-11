@@ -2,11 +2,11 @@ mod python_bridge;
 
 use python_bridge::{PythonBridge, StreamEvent};
 use serde_json::{json, Value};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, Window};
 
 struct AppState {
-    py: Mutex<Option<PythonBridge>>,
+    py: Mutex<Option<Arc<PythonBridge>>>,
 }
 
 // ── Books ──
@@ -122,15 +122,17 @@ fn save_model_configs(configs: Value, state: tauri::State<AppState>) -> Result<V
 }
 
 #[tauri::command]
-fn chat(message: String, config: Value, current_book: Option<String>, current_chapter: Option<String>, app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<Value, String> {
-    let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
-    let py = guard.as_ref().ok_or("Python not started")?;
+async fn chat(message: String, config: Value, current_book: Option<String>, current_chapter: Option<String>, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    let py = {
+        let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
+        guard.as_ref().cloned().ok_or("Python not started")?
+    };
 
-    // call_streaming blocks, but that's fine — Tauri commands run on a thread pool
-    py.call_streaming(
-        "chat",
-        json!({ "message": message, "config": config, "current_book": current_book, "current_chapter": current_chapter }),
-        |event| match event {
+    tauri::async_runtime::spawn_blocking(move || {
+        py.call_streaming(
+            "chat",
+            json!({ "message": message, "config": config, "current_book": current_book, "current_chapter": current_chapter }),
+            |event| match event {
             StreamEvent::Chunk(content) => {
                 let _ = app.emit("chat:chunk", json!({ "content": content }));
             }
@@ -152,8 +154,11 @@ fn chat(message: String, config: Value, current_book: Option<String>, current_ch
             StreamEvent::Done => {
                 let _ = app.emit("chat:done", json!({}));
             }
-        },
-    )
+            },
+        )
+    })
+    .await
+    .map_err(|e| format!("Chat worker failed: {e}"))?
 }
 
 #[tauri::command]
@@ -239,14 +244,20 @@ pub fn run() {
                 .map_err(|e| format!("data dir: {e}"))?
                 .to_string_lossy()
                 .to_string();
+            let resource_dir = app
+                .path()
+                .resource_dir()
+                .map_err(|e| format!("resource dir: {e}"))?
+                .to_string_lossy()
+                .to_string();
 
-            let py = PythonBridge::start(&data_dir).map_err(|e| {
+            let py = PythonBridge::start(&data_dir, &resource_dir).map_err(|e| {
                 log::error!("Python backend failed: {e}");
                 e
             })?;
 
             app.manage(AppState {
-                py: Mutex::new(Some(py)),
+                py: Mutex::new(Some(Arc::new(py))),
             });
 
             // Restore window state

@@ -21,6 +21,13 @@ const TOOL_META: Record<string, { icon: string; label: string; color: string }> 
   create_group: { icon: '+', label: '创建分组', color: '#55a36f' },
   rename_group: { icon: 'N', label: '重命名分组', color: '#d19a66' },
   move_chapter_to_group: { icon: 'M', label: '移动章节', color: '#d19a66' },
+  novel_search: { icon: 'Q', label: '搜索小说', color: '#4d8fb3' },
+  novel_book_info: { icon: 'I', label: '读取书籍数据', color: '#4d8fb3' },
+  novel_catalog: { icon: 'C', label: '读取小说目录', color: '#7b83c5' },
+  novel_read_chapter: { icon: 'R', label: '阅读参考章节', color: '#7b83c5' },
+  qidian_rankings: { icon: '#', label: '查询起点榜单', color: '#c28b3c' },
+  novel_writing_reference: { icon: 'K', label: '读取写作知识', color: '#8c6bb1' },
+  novel_knowledge_search: { icon: 'K', label: '检索小说知识库', color: '#8c6bb1' },
 };
 
 const PHASE_LABELS: Record<RunPhase, string> = {
