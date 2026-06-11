@@ -5,9 +5,23 @@ interface Props {
   disabled: boolean;
 }
 
+const CHAT_INPUT_HEIGHT_KEY = 'soul-writer-chat-input-height';
+
+function loadInputHeight(): number {
+  try {
+    const v = localStorage.getItem(CHAT_INPUT_HEIGHT_KEY);
+    if (v) return parseInt(v, 10) || 68;
+  } catch {}
+  return 68;
+}
+
+function saveInputHeight(h: number) {
+  try { localStorage.setItem(CHAT_INPUT_HEIGHT_KEY, String(h)); } catch {}
+}
+
 const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
   const [text, setText] = useState('');
-  const [inputHeight, setInputHeight] = useState(68);
+  const [inputHeight, setInputHeight] = useState(loadInputHeight);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const dragging = useRef(false);
   const startY = useRef(0);
@@ -40,7 +54,9 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return;
       const delta = startY.current - e.clientY;
-      setInputHeight(Math.max(44, Math.min(300, startHeight.current + delta)));
+      const h = Math.max(44, Math.min(300, startHeight.current + delta));
+      setInputHeight(h);
+      saveInputHeight(h);
     };
     const onUp = () => {
       dragging.current = false;
