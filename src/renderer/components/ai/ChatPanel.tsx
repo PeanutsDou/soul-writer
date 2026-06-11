@@ -16,7 +16,9 @@ const ChatPanel: React.FC<Props> = ({ width }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadConfigs(); init(); return () => destroy(); }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth', block: 'end' });
+  }, [messages, streaming]);
 
   const hasConfig = configs.length > 0;
 
@@ -24,9 +26,9 @@ const ChatPanel: React.FC<Props> = ({ width }) => {
     <div className="chat-panel" style={width ? { width } : undefined}>
       <div className="chat-messages">
         {!hasConfig ? (
-          <div className="chat-empty"><p>点击顶部 ⚙ 设置 API Key</p></div>
+          <div className="chat-empty"><p>请先在顶部设置里配置 API Key</p></div>
         ) : messages.length === 0 ? (
-          <div className="chat-empty"><h2>AI 助手</h2><p>开始对话</p></div>
+          <div className="chat-empty"><h2>AI 助手</h2><p>开始对话，或让它读取和修改当前章节</p></div>
         ) : (
           messages.map((msg) => <ChatMessageBubble key={msg.id} message={msg} />)
         )}

@@ -134,11 +134,17 @@ fn chat(message: String, config: Value, current_book: Option<String>, current_ch
             StreamEvent::Chunk(content) => {
                 let _ = app.emit("chat:chunk", json!({ "content": content }));
             }
-            StreamEvent::ToolStart { name, args } => {
-                let _ = app.emit("chat:tool", json!({ "phase": "start", "name": name, "args": args }));
+            StreamEvent::Thinking(content) => {
+                let _ = app.emit("chat:thinking", json!({ "content": content }));
             }
-            StreamEvent::ToolEnd { name, result } => {
-                let _ = app.emit("chat:tool", json!({ "phase": "end", "name": name, "result": result }));
+            StreamEvent::TokenUsage(tokens) => {
+                let _ = app.emit("chat:usage", json!({ "tokens": tokens }));
+            }
+            StreamEvent::ToolStart { id, name, args } => {
+                let _ = app.emit("chat:tool", json!({ "phase": "start", "id": id, "name": name, "args": args }));
+            }
+            StreamEvent::ToolEnd { id, name, result } => {
+                let _ = app.emit("chat:tool", json!({ "phase": "end", "id": id, "name": name, "result": result }));
             }
             StreamEvent::Error(error) => {
                 let _ = app.emit("chat:error", json!({ "error": error }));
@@ -151,9 +157,9 @@ fn chat(message: String, config: Value, current_book: Option<String>, current_ch
 }
 
 #[tauri::command]
-fn reset_agent(state: tauri::State<AppState>) -> Result<Value, String> {
+fn reset_agent(config: Option<Value>, state: tauri::State<AppState>) -> Result<Value, String> {
     let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
-    guard.as_ref().ok_or("Python not started")?.call("reset_agent", json!({}))
+    guard.as_ref().ok_or("Python not started")?.call("reset_agent", json!({ "config": config }))
 }
 
 // ── Window controls (native Tauri) ──

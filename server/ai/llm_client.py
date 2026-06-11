@@ -1,108 +1,137 @@
-"""
-OpenAI-compatible streaming LLM client.
-Supports OpenAI, DeepSeek, local servers, and any OpenAI-compatible API.
-"""
+"""OpenAI-compatible streaming LLM client."""
 import json
-import sys
-import httpx
+import uuid
 from typing import Generator
+
+import httpx
 
 
 class LLMClient:
-    """Streaming LLM client for OpenAI-compatible APIs."""
-
     def __init__(self, base_url: str, api_key: str, model: str):
-        self.base_url = base_url.rstrip("/")
+        normalized = base_url.rstrip("/")
+        for suffix in ("/chat/completions", "/completions"):
+            if normalized.endswith(suffix):
+                normalized = normalized[:-len(suffix)]
+        self.base_url = normalized
         self.api_key = api_key
         self.model = model
-        self._client = httpx.Client(timeout=httpx.Timeout(120.0, connect=10.0))
+        self._client = httpx.Client(timeout=httpx.Timeout(300.0, connect=15.0))
 
-    def chat(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-    ) -> dict:
-        url = f"{self.base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+    def _request_payload(self, messages: list[dict], tools: list[dict] | None) -> dict:
         payload = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            "temperature": 0.7,
+            "max_tokens": 16384,
+            "stream": True,
+            "stream_options": {"include_usage": True},
         }
         if tools:
             payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        return payload
 
-        # DeepSeek: disable thinking mode when using tools (not compatible)
-        if "deepseek" in self.model.lower():
-            payload["thinking"] = {"type": "disabled"}
+    @staticmethod
+    def _complete_event(data: dict) -> dict:
+        choices = data.get("choices") or [{}]
+        choice = choices[0]
+        message = choice.get("message", {}) or {}
+        return {
+            "type": "complete",
+            "content": message.get("content", "") or "",
+            "reasoning_content": message.get("reasoning_content", "") or "",
+            "tool_calls": message.get("tool_calls", []) or [],
+            "usage": data.get("usage", {}) or {},
+        }
 
-        try:
-            response = self._client.post(url, json=payload, headers=headers)
-            if response.status_code != 200:
-                error_body = response.text[:300]
-                raise RuntimeError(f"API error {response.status_code}: {error_body}")
-            data = response.json()
-            choice = data.get("choices", [{}])[0]
-            msg = choice.get("message", {})
-            return {
-                "content": msg.get("content", ""),
-                "tool_calls": msg.get("tool_calls", []),
-            }
-        except httpx.RequestError as e:
-            raise RuntimeError(f"API connection failed: {e}")
-
-    def chat_stream(
-        self,
-        messages: list[dict],
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-    ) -> Generator[str, None, None]:
-        """
-        Stream chat completion tokens.
-        Yields content strings as they arrive.
-        """
+    def chat_stream(self, messages: list[dict], tools: list[dict] | None = None) -> Generator[dict, None, None]:
+        """Yield reasoning/content deltas and one final complete event."""
         url = f"{self.base_url}/chat/completions"
+        if not self.base_url or not self.model:
+            raise ValueError("模型地址和模型名称不能为空")
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }
 
         try:
-            with self._client.stream("POST", url, json=payload, headers=headers) as response:
+            with self._client.stream(
+                "POST",
+                url,
+                json=self._request_payload(messages, tools),
+                headers=headers,
+            ) as response:
                 if response.status_code != 200:
-                    error_body = response.read().decode("utf-8", errors="replace")
-                    raise RuntimeError(f"API error {response.status_code}: {error_body[:300]}")
+                    body = response.read().decode("utf-8", errors="replace")
+                    raise RuntimeError(f"API error {response.status_code}: {body[:500]}")
+
+                content_type = response.headers.get("content-type", "").lower()
+                if "application/json" in content_type:
+                    yield self._complete_event(response.json())
+                    return
+
+                content = ""
+                reasoning = ""
+                tool_calls: dict[int, dict] = {}
+                usage = {}
 
                 for line in response.iter_lines():
                     line = line.strip()
-                    if not line or not line.startswith("data: "):
+                    if not line or not line.startswith("data:"):
                         continue
-                    data_str = line[6:]  # Remove "data: " prefix
-                    if data_str == "[DONE]":
+                    raw = line[5:].strip()
+                    if raw == "[DONE]":
                         break
                     try:
-                        data = json.loads(data_str)
-                        delta = data.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            yield content
+                        data = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
-        except httpx.RequestError as e:
-            raise RuntimeError(f"API connection failed: {e}")
+
+                    choices = data.get("choices") or [{}]
+                    delta = choices[0].get("delta", {}) or {}
+                    if data.get("usage"):
+                        usage = data["usage"]
+                    text = delta.get("content", "") or ""
+                    if text:
+                        content += text
+                        yield {"type": "content_delta", "content": text}
+
+                    thought = delta.get("reasoning_content", "") or ""
+                    if thought:
+                        reasoning += thought
+                        yield {"type": "reasoning_delta", "content": thought}
+
+                    for tc_delta in delta.get("tool_calls", []) or []:
+                        index = tc_delta.get("index", 0)
+                        current = tool_calls.setdefault(index, {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        })
+                        if tc_delta.get("id"):
+                            current["id"] = tc_delta["id"]
+                        function = tc_delta.get("function", {}) or {}
+                        if function.get("name"):
+                            current["function"]["name"] = function["name"]
+                        if function.get("arguments"):
+                            current["function"]["arguments"] += function["arguments"]
+
+                completed_calls = []
+                for index in sorted(tool_calls):
+                    call = tool_calls[index]
+                    if call["function"]["name"]:
+                        call["id"] = call["id"] or f"call_{uuid.uuid4().hex}"
+                        completed_calls.append(call)
+
+                yield {
+                    "type": "complete",
+                    "content": content,
+                    "reasoning_content": reasoning,
+                    "tool_calls": completed_calls,
+                    "usage": usage,
+                }
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"API connection failed: {exc}") from exc
 
     def close(self):
         self._client.close()

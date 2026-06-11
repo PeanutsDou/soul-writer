@@ -19,14 +19,19 @@ interface DocumentState {
   currentChapter: string | null;
   meta: BookMeta | null;
   document: any | null;
+  documentRevision: number;
+  pendingDocument: any | null;
   wordCount: number;
   saveStatus: string;
+  chapterSort: 'asc' | 'desc';
 
   setCurrentBook: (name: string | null) => void;
   setCurrentChapter: (name: string | null) => void;
   loadMeta: (bookName: string) => Promise<void>;
   loadDocument: (bookName: string, chapterName: string) => Promise<void>;
-  saveDocument: (content: any) => Promise<void>;
+  stageDocument: (content: any) => void;
+  saveDocument: (content?: any) => Promise<void>;
+  toggleChapterSort: () => void;
 
   createGroup: (name: string) => Promise<void>;
   renameGroup: (oldName: string, newName: string) => Promise<void>;
@@ -44,7 +49,7 @@ function countWords(doc: any): number {
   function walk(node: any) {
     if (typeof node === 'object' && node !== null) {
       if (node.text && typeof node.text === 'string') count += [...node.text].length;
-      for (const v of Object.values(node)) walk(v);
+      for (const value of Object.values(node)) walk(value);
     }
     if (Array.isArray(node)) node.forEach(walk);
   }
@@ -57,17 +62,22 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   currentChapter: null,
   meta: null,
   document: null,
+  documentRevision: 0,
+  pendingDocument: null,
   wordCount: 0,
   saveStatus: '',
+  chapterSort: (() => {
+    try { return localStorage.getItem('soul-writer-chapter-sort') === 'desc' ? 'desc' : 'asc'; } catch { return 'asc'; }
+  })(),
 
   setCurrentBook: (name) => {
     try { localStorage.setItem('soul-writer-last-book', name || ''); } catch {}
-    set({ currentBook: name, currentChapter: null, document: null, meta: null, wordCount: 0 });
+    set({ currentBook: name, currentChapter: null, document: null, meta: null, wordCount: 0, pendingDocument: null });
   },
+
   setCurrentChapter: (name) => {
     try { localStorage.setItem('soul-writer-last-chapter', name || ''); } catch {}
-    // Clear document when switching chapters — prevents old content flash
-    set({ currentChapter: name, document: null, wordCount: 0, saveStatus: '' });
+    set({ currentChapter: name, document: null, wordCount: 0, saveStatus: '', pendingDocument: null });
   },
 
   loadMeta: async (bookName) => {
@@ -78,25 +88,44 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   loadDocument: async (bookName, chapterName) => {
     const doc = await invoke<any>('get_document', { bookName, chapterName });
     const count = doc?._count ?? countWords(doc);
-    set({ document: doc, currentChapter: chapterName, wordCount: count, saveStatus: '' });
+    set(s => ({
+      document: doc,
+      currentChapter: chapterName,
+      wordCount: count,
+      saveStatus: '',
+      pendingDocument: null,
+      documentRevision: s.documentRevision + 1,
+    }));
   },
 
+  stageDocument: (content) => set({ pendingDocument: content, wordCount: countWords(content) }),
+
   saveDocument: async (content) => {
-    const { currentBook, currentChapter } = get();
+    const { currentBook, currentChapter, pendingDocument } = get();
     if (!currentBook || !currentChapter) return;
-    // Skip save if AI chat is in progress (pipe is busy)
+    const documentToSave = content ?? pendingDocument;
+    if (!documentToSave) return;
     const { isChatBusy } = await import('./ai-store');
-    if (isChatBusy) return;
+    if (isChatBusy) {
+      set({ pendingDocument: documentToSave, saveStatus: '等待 AI 完成后保存' });
+      return;
+    }
+
     set({ saveStatus: '保存中...' });
     try {
-      const result = await invoke<any>('save_document', { bookName: currentBook, chapterName: currentChapter, content });
-      // Use backend's character count (authoritative)
-      const backendCount = result?.debug_count ?? countWords(content);
-      set({ document: content, wordCount: backendCount, saveStatus: '已保存' });
+      const result = await invoke<any>('save_document', { bookName: currentBook, chapterName: currentChapter, content: documentToSave });
+      const backendCount = result?.debug_count ?? countWords(documentToSave);
+      set({ document: documentToSave, pendingDocument: null, wordCount: backendCount, saveStatus: '已保存' });
     } catch {
       set({ saveStatus: '保存失败' });
     }
   },
+
+  toggleChapterSort: () => set(state => {
+    const chapterSort = state.chapterSort === 'asc' ? 'desc' : 'asc';
+    try { localStorage.setItem('soul-writer-chapter-sort', chapterSort); } catch {}
+    return { chapterSort };
+  }),
 
   createGroup: async (name) => {
     const { currentBook } = get();
@@ -149,7 +178,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     await invoke('delete_chapter', { bookName: currentBook, chapterName });
     await get().loadMeta(currentBook);
     if (get().currentChapter === chapterName) {
-      set({ currentChapter: null, document: null, wordCount: 0 });
+      set({ currentChapter: null, document: null, pendingDocument: null, wordCount: 0 });
     }
   },
 

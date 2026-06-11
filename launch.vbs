@@ -1,5 +1,6 @@
 Set ws = CreateObject("Wscript.Shell")
-ws.CurrentDirectory = "D:\douzhongjun\soul writer"
+Set fso = CreateObject("Scripting.FileSystemObject")
+ws.CurrentDirectory = fso.GetParentFolderName(WScript.ScriptFullName)
 
 ' Start Vite hidden
 ws.Run "node node_modules\vite\bin\vite.js --config config\vite.config.ts", 0, False

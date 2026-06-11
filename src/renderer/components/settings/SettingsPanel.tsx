@@ -8,13 +8,13 @@ interface Props {
 const SettingsPanel: React.FC<Props> = ({ onClose }) => {
   const { configs, loading, load, add, remove, update } = useModelConfigStore();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', url: '', model: '', api_key: '' });
+  const [form, setForm] = useState({ name: '', url: '', model: '', api_key: '', context_window: 1_000_000 });
   const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => { load(); }, []);
 
   const resetForm = () => {
-    setForm({ name: '', url: '', model: '', api_key: '' });
+    setForm({ name: '', url: '', model: '', api_key: '', context_window: 1_000_000 });
     setEditingId(null);
     setShowAdd(false);
   };
@@ -30,7 +30,7 @@ const SettingsPanel: React.FC<Props> = ({ onClose }) => {
   };
 
   const handleEdit = (cfg: ModelConfig) => {
-    setForm({ name: cfg.name, url: cfg.url, model: cfg.model, api_key: cfg.api_key });
+    setForm({ name: cfg.name, url: cfg.url, model: cfg.model, api_key: cfg.api_key, context_window: cfg.context_window || 1_000_000 });
     setEditingId(cfg.id);
     setShowAdd(true);
   };
@@ -77,6 +77,17 @@ const SettingsPanel: React.FC<Props> = ({ onClose }) => {
                   <input className="dialog-input" placeholder="API URL（如：https://api.deepseek.com/v1）" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
                   <input className="dialog-input" placeholder="模型名（如：deepseek-chat）" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
                   <input className="dialog-input" placeholder="API Key" type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} />
+                  <label className="settings-field-label">
+                    上下文窗口上限（Token，默认 1000K）
+                    <input
+                      className="dialog-input"
+                      type="number"
+                      min={1000}
+                      step={1000}
+                      value={form.context_window}
+                      onChange={(e) => setForm({ ...form, context_window: Math.max(1000, Number(e.target.value) || 1_000_000) })}
+                    />
+                  </label>
                   <div className="dialog-actions">
                     <button className="dialog-btn" onClick={resetForm}>取消</button>
                     <button className="dialog-btn primary" onClick={handleSave}>{editingId ? '保存' : '添加'}</button>

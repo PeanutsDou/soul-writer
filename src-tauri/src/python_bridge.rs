@@ -32,23 +32,30 @@ enum StreamLine {
     #[serde(rename = "stream_start")]
     Start,
     #[serde(rename = "stream_chunk")]
+    #[serde(alias = "chunk")]
     Chunk { content: String },
+    #[serde(rename = "thinking_chunk")]
+    ThinkingChunk { content: String },
+    #[serde(rename = "token_usage")]
+    TokenUsage { tokens: u64 },
     #[serde(rename = "stream_error")]
     StreamError { error: String },
     #[serde(rename = "stream_end")]
     End,
     #[serde(rename = "tool_start")]
-    ToolStart { name: String, args: Value },
+    ToolStart { id: String, name: String, args: Value },
     #[serde(rename = "tool_end")]
-    ToolEnd { name: String, result: String },
+    ToolEnd { id: String, name: String, result: String },
     #[serde(rename = "done")]
     Done,
 }
 
 pub enum StreamEvent {
     Chunk(String),
-    ToolStart { name: String, args: Value },
-    ToolEnd { name: String, result: String },
+    Thinking(String),
+    TokenUsage(u64),
+    ToolStart { id: String, name: String, args: Value },
+    ToolEnd { id: String, name: String, result: String },
     Error(String),
     Done,
 }
@@ -143,11 +150,15 @@ impl PythonBridge {
             stdin.flush().map_err(|e| format!("Flush: {e}"))?;
         }
 
+        let mut stream_error: Option<String> = None;
         loop {
             let mut line = String::new();
             {
                 let mut reader = self.stdout.lock().map_err(|e| format!("Lock: {e}"))?;
-                reader.read_line(&mut line).map_err(|e| format!("Read: {e}"))?;
+                let bytes = reader.read_line(&mut line).map_err(|e| format!("Read: {e}"))?;
+                if bytes == 0 {
+                    return Err("Python backend exited unexpectedly".to_string());
+                }
             }
 
             let trimmed = line.trim();
@@ -158,11 +169,13 @@ impl PythonBridge {
                 match sl {
                     StreamLine::Start => {}
                     StreamLine::Chunk { content } => on_event(StreamEvent::Chunk(content)),
-                    StreamLine::ToolStart { name, args } => on_event(StreamEvent::ToolStart { name, args }),
-                    StreamLine::ToolEnd { name, result } => on_event(StreamEvent::ToolEnd { name, result }),
+                    StreamLine::ThinkingChunk { content } => on_event(StreamEvent::Thinking(content)),
+                    StreamLine::TokenUsage { tokens } => on_event(StreamEvent::TokenUsage(tokens)),
+                    StreamLine::ToolStart { id, name, args } => on_event(StreamEvent::ToolStart { id, name, args }),
+                    StreamLine::ToolEnd { id, name, result } => on_event(StreamEvent::ToolEnd { id, name, result }),
                     StreamLine::StreamError { error } => {
                         on_event(StreamEvent::Error(error.clone()));
-                        return Err(error);
+                        stream_error = Some(error);
                     }
                     StreamLine::Done => on_event(StreamEvent::Done),
                     StreamLine::End => {} // legacy, ignore
@@ -172,6 +185,9 @@ impl PythonBridge {
 
             // Try final response
             if let Ok(resp) = serde_json::from_str::<Response>(trimmed) {
+                if let Some(error) = stream_error {
+                    return Err(error);
+                }
                 return if resp.ok { Ok(resp.data) } else { Err(resp.error) };
             }
 
@@ -194,7 +210,10 @@ impl PythonBridge {
         let mut line = String::new();
         {
             let mut reader = self.stdout.lock().map_err(|e| format!("Lock: {e}"))?;
-            reader.read_line(&mut line).map_err(|e| format!("Read: {e}"))?;
+            let bytes = reader.read_line(&mut line).map_err(|e| format!("Read: {e}"))?;
+            if bytes == 0 {
+                return Err("Python backend exited unexpectedly".to_string());
+            }
         }
 
         let resp: Response = serde_json::from_str(&line).map_err(|e| format!("Parse: {e} ({line})"))?;

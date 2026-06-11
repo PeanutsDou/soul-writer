@@ -23,13 +23,41 @@ function em(err: any, fallback: string): string {
   return typeof err === 'string' ? err : (err?.message || fallback);
 }
 
+function chapterNumber(name: string): number | null {
+  const match = /^第(\d+)章(?:\s|$)/.exec(name.trim());
+  if (match) return Number(match[1]);
+  const chinese = /^第([零一二三四五六七八九十百]+)章(?:\s|$)/.exec(name.trim());
+  if (!chinese) return null;
+  const digits: Record<string, number> = { 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  let total = 0;
+  let current = 0;
+  for (const char of chinese[1]) {
+    if (char === '十') { total += (current || 1) * 10; current = 0; }
+    else if (char === '百') { total += (current || 1) * 100; current = 0; }
+    else current = digits[char] ?? current;
+  }
+  return total + current;
+}
+
+function sortChapters(chapters: string[], direction: 'asc' | 'desc'): string[] {
+  const factor = direction === 'asc' ? 1 : -1;
+  return [...chapters].sort((a, b) => {
+    const an = chapterNumber(a);
+    const bn = chapterNumber(b);
+    if (an != null && bn != null && an !== bn) return (an - bn) * factor;
+    if (an != null && bn == null) return -1;
+    if (an == null && bn != null) return 1;
+    return a.localeCompare(b, 'zh-CN', { numeric: true }) * factor;
+  });
+}
+
 const DocumentTree: React.FC = () => {
   const {
     meta, currentChapter, setCurrentChapter,
     loadDocument, currentBook,
     toggleGroup, renameGroup, deleteGroup,
     renameChapter, deleteChapter, moveChapter,
-    createGroup, createChapter,
+    createGroup, createChapter, chapterSort,
   } = useDocumentStore();
 
   const [ctxMenu, setCtxMenu] = useState<ContextMenu | null>(null);
@@ -279,7 +307,7 @@ const DocumentTree: React.FC = () => {
               </span>
             )}
           </div>
-          {group.expanded && group.chapters.map((ch) => (
+          {group.expanded && sortChapters(group.chapters, chapterSort).map((ch) => (
             <div key={ch}
               className={`doc-chapter${currentChapter === ch ? ' active' : ''}`}
               onMouseDown={(e) => onChapterMouseDown(e, ch)}
@@ -341,7 +369,7 @@ const DocumentTree: React.FC = () => {
             <span>未分组 ({meta.ungrouped.length})</span>
           </div>
         )}
-        {meta.ungrouped.map((ch) => (
+        {sortChapters(meta.ungrouped, chapterSort).map((ch) => (
           <div key={ch}
             className={`doc-chapter${currentChapter === ch ? ' active' : ''}`}
             onMouseDown={(e) => onChapterMouseDown(e, ch)}

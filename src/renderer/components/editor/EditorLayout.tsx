@@ -11,6 +11,7 @@ import FontSize from '../../extensions/FontSize';
 import LineHeight from '../../extensions/LineHeight';
 import { useDocumentStore } from '../../stores/document-store';
 import { useEditorPrefs } from '../../stores/editor-prefs';
+import { useAiStore } from '../../stores/ai-store';
 import Sidebar from './Sidebar';
 import EditorToolbar from './EditorToolbar';
 import ChatPanel from '../ai/ChatPanel';
@@ -32,13 +33,13 @@ function saveWidths(left: number, right: number) {
 
 const EditorLayout: React.FC = () => {
   const {
-    currentChapter, currentBook, document, wordCount, saveStatus,
-    saveDocument,
+    currentChapter, currentBook, document, documentRevision, wordCount, saveStatus,
+    stageDocument, saveDocument,
   } = useDocumentStore();
+  const aiStreaming = useAiStore((state) => state.streaming);
   const prefs = useEditorPrefs();
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastChapterRef = useRef<string | null>(null);
 
   const initWidths = loadWidths();
   const [leftWidth, setLeftWidth] = useState(initWidths.left);
@@ -56,8 +57,10 @@ const EditorLayout: React.FC = () => {
       (ed.view.dom as HTMLElement).style.setProperty('--editor-line-height', prefs.lineHeight);
     },
     onUpdate: ({ editor: ed }) => {
+      const content = ed.getJSON();
+      stageDocument(content);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => saveDocument(ed.getJSON()), 600);
+      saveTimerRef.current = setTimeout(() => saveDocument(), 600);
     },
     editorProps: {
       attributes: {
@@ -67,25 +70,30 @@ const EditorLayout: React.FC = () => {
   });
 
   useEffect(() => {
-    if (editor && document && currentChapter && currentChapter !== lastChapterRef.current) {
-      lastChapterRef.current = currentChapter;
+    if (editor && document && currentChapter) {
       editor.commands.setContent(document);
       (editor.view.dom as HTMLElement).style.setProperty('--editor-line-height', prefs.lineHeight);
       setTimeout(() => editor.commands.focus('end'), 50);
     }
-  }, [currentChapter, document, editor, prefs.lineHeight]);
+  }, [currentChapter, documentRevision, editor, prefs.lineHeight]);
+
+  useEffect(() => {
+    editor?.setEditable(!aiStreaming);
+  }, [editor, aiStreaming]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
-        saveDocument(editor?.getJSON());
+        const content = editor?.getJSON();
+        if (content) stageDocument(content);
+        saveDocument(content);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [editor, saveDocument]);
+  }, [editor, saveDocument, stageDocument]);
 
   useEffect(() => {
     return () => { if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveDocument(editor?.getJSON()); } };
@@ -126,8 +134,9 @@ const EditorLayout: React.FC = () => {
               <div className="editor-doc-title">
                 <span className="editor-doc-title-text">{currentChapter}</span>
               </div>
-              <div className="editor-content">
+              <div className={`editor-content ${aiStreaming ? 'editor-content-locked' : ''}`}>
                 <EditorContent editor={editor} />
+                {aiStreaming && <div className="editor-lock-note">AI 正在处理文档，编辑暂时锁定</div>}
               </div>
             </>
           ) : (

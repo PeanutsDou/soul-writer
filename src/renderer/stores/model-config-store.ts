@@ -7,6 +7,7 @@ export interface ModelConfig {
   url: string;
   model: string;
   api_key: string;
+  context_window?: number;
 }
 
 interface ModelConfigState {
@@ -29,7 +30,7 @@ export const useModelConfigStore = create<ModelConfigState>((set, get) => ({
     set({ loading: true });
     try {
       const result = await invoke<any>('get_model_configs');
-      set({ configs: result?.configs || [], loading: false });
+      set({ configs: (result?.configs || []).map((config: ModelConfig) => ({ ...config, context_window: config.context_window || 1_000_000 })), loading: false });
     } catch {
       set({ loading: false });
     }

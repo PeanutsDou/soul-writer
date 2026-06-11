@@ -3,7 +3,7 @@ import { useDocumentStore } from '../../stores/document-store';
 import DocumentTree from './DocumentTree';
 
 const Sidebar: React.FC = () => {
-  const { meta, currentBook, createGroup, createChapter } = useDocumentStore();
+  const { currentBook, chapterSort, toggleChapterSort } = useDocumentStore();
   const [error, setError] = useState<string | null>(null);
 
   const handleListContext = useCallback((e: React.MouseEvent) => {
@@ -19,6 +19,14 @@ const Sidebar: React.FC = () => {
     <div className="sidebar">
       <div className="sidebar-header">
         <span className="sidebar-book-name">{currentBook}</span>
+        <button
+          className="chapter-sort-btn"
+          type="button"
+          onClick={toggleChapterSort}
+          title={chapterSort === 'asc' ? '当前按章节正序，点击切换倒序' : '当前按章节倒序，点击切换正序'}
+        >
+          {chapterSort === 'asc' ? '1→9' : '9→1'}
+        </button>
       </div>
       <div className="sidebar-list" onContextMenu={handleListContext}>
         {error && (

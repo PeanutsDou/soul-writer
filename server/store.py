@@ -5,6 +5,7 @@ Replaces the old JSON file_store.py.
 import sqlite3
 import uuid
 import os
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -26,6 +27,9 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
         self._init_tables()
+
+    def close(self):
+        self.db.close()
 
     def _init_tables(self):
         self.db.executescript("""
@@ -256,11 +260,27 @@ class Store:
 
     # ── Chapters ──
 
+    def _next_chapter_name(self, book_id: str, requested_name: str) -> str:
+        requested_name = requested_name.strip()
+        if re.match(r"^第\d+章(?:\s|$)", requested_name):
+            return requested_name
+        rows = self.db.execute(
+            "SELECT name FROM chapters WHERE book_id = ?", (book_id,)
+        ).fetchall()
+        numbers = []
+        for row in rows:
+            match = re.match(r"^第(\d+)章(?:\s|$)", row["name"])
+            if match:
+                numbers.append(int(match.group(1)))
+        next_number = max(numbers, default=len(rows)) + 1
+        return f"第{next_number}章 {requested_name}" if requested_name else f"第{next_number}章"
+
     def create_chapter(self, book_name: str, name: str, group_id: Optional[str] = None) -> str:
         row = self.db.execute("SELECT id FROM books WHERE name = ?", (book_name,)).fetchone()
         if not row:
             raise ValueError(f"书籍 '{book_name}' 不存在")
         bid = row["id"]
+        name = self._next_chapter_name(bid, name)
         try:
             max_order = self.db.execute(
                 "SELECT MAX(sort_order) FROM chapters WHERE book_id = ? AND (group_id = ? OR (? IS NULL AND group_id IS NULL))",
@@ -341,4 +361,5 @@ class Store:
             "UPDATE chapters SET content = ? WHERE book_id = ? AND name = ?",
             (json.dumps(content, ensure_ascii=False), bid, chapter_name),
         )
+        self.db.execute("UPDATE books SET updated_at = ? WHERE id = ?", (_now(), bid))
         self.db.commit()

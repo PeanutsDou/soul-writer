@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 interface Props {
   onSend: (text: string) => void;
@@ -10,9 +10,9 @@ const CHAT_INPUT_HEIGHT_KEY = 'soul-writer-chat-input-height';
 function loadInputHeight(): number {
   try {
     const v = localStorage.getItem(CHAT_INPUT_HEIGHT_KEY);
-    if (v) return parseInt(v, 10) || 68;
+    if (v) return parseInt(v, 10) || 72;
   } catch {}
-  return 68;
+  return 72;
 }
 
 function saveInputHeight(h: number) {
@@ -31,6 +31,7 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
     if (disabled || !text.trim()) return;
     onSend(text.trim());
     setText('');
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, [text, disabled, onSend]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -40,7 +41,6 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
     }
   }, [handleSend]);
 
-  // Resize handle
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragging.current = true;
@@ -54,7 +54,7 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return;
       const delta = startY.current - e.clientY;
-      const h = Math.max(44, Math.min(300, startHeight.current + delta));
+      const h = Math.max(52, Math.min(300, startHeight.current + delta));
       setInputHeight(h);
       saveInputHeight(h);
     };
@@ -78,7 +78,7 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
         <textarea
           ref={inputRef}
           className="chat-input"
-          placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
+          placeholder="输入消息... Enter 发送，Shift+Enter 换行"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -90,6 +90,8 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
             className="send-btn"
             onClick={handleSend}
             disabled={disabled || !text.trim()}
+            title="发送"
+            type="button"
           >
             ↑
           </button>

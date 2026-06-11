@@ -1,58 +1,116 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMessage as ChatMsg } from '../../stores/ai-store';
+import type { ChatMessage as ChatMsg, RunPhase } from '../../stores/ai-store';
 
 interface Props {
   message: ChatMsg;
 }
 
+const TOOL_META: Record<string, { icon: string; label: string; color: string }> = {
+  read_chapter: { icon: 'R', label: '读取章节', color: '#5b8def' },
+  search_content: { icon: 'S', label: '搜索正文', color: '#56b6c2' },
+  get_chapter_stats: { icon: '#', label: '章节统计', color: '#9a7fd1' },
+  get_book_outline: { icon: 'O', label: '读取目录', color: '#8aa1b4' },
+  insert_text: { icon: '+', label: '插入文本', color: '#55a36f' },
+  replace_in_chapter: { icon: 'E', label: '替换文本', color: '#55a36f' },
+  create_chapter: { icon: '+', label: '创建章节', color: '#55a36f' },
+  rename_chapter: { icon: 'N', label: '重命名章节', color: '#d19a66' },
+  delete_chapter: { icon: 'D', label: '删除章节', color: '#d86b6b' },
+  apply_style: { icon: 'A', label: '应用样式', color: '#9a7fd1' },
+  create_group: { icon: '+', label: '创建分组', color: '#55a36f' },
+  rename_group: { icon: 'N', label: '重命名分组', color: '#d19a66' },
+  move_chapter_to_group: { icon: 'M', label: '移动章节', color: '#d19a66' },
+};
+
+const PHASE_LABELS: Record<RunPhase, string> = {
+  idle: '',
+  starting: '连接模型',
+  thinking: '整理工具结果',
+  tool_running: '执行工具',
+  streaming: '实时输出',
+  finishing: '整理回复',
+  error: '请求失败',
+};
+
+const LARGE_RESULT_THRESHOLD = 12000;
+
+function formatArgs(args: any, maxLen = 120): string {
+  if (!args) return '';
+  try {
+    const obj = typeof args === 'string' ? JSON.parse(args) : args;
+    if (!obj || typeof obj !== 'object') return String(obj).slice(0, maxLen);
+    return Object.entries(obj)
+      .filter(([, value]) => value != null && value !== '')
+      .map(([key, value]) => `${key}=${typeof value === 'string' ? value.slice(0, 42) : JSON.stringify(value)}`)
+      .join(', ')
+      .slice(0, maxLen);
+  } catch {
+    return String(args).slice(0, maxLen);
+  }
+}
+
+function resultPreview(result: string): string {
+  if (result.length <= LARGE_RESULT_THRESHOLD) return result;
+  const head = result.slice(0, 5000);
+  const tail = result.slice(-1200);
+  return `${head}\n\n... 已折叠 ${(result.length - head.length - tail.length).toLocaleString()} 个字符 ...\n\n${tail}`;
+}
+
 const ToolCard: React.FC<{ name: string; args: any; result?: string; done: boolean }> = ({ name, args, result, done }) => {
   const [open, setOpen] = useState(false);
-  const argStr = typeof args === 'object' ? Object.entries(args).filter(([,v]) => v != null).map(([k,v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ') : String(args);
+  const [showFull, setShowFull] = useState(false);
+  const meta = TOOL_META[name] || { icon: '-', label: name, color: '#6c7480' };
+  const argStr = useMemo(() => formatArgs(args), [args]);
+  const visibleResult = result && !showFull ? resultPreview(result) : result;
+  const large = Boolean(result && result.length > LARGE_RESULT_THRESHOLD);
 
   return (
-    <div className="tool-card">
-      <div className="tool-card-header" onClick={() => setOpen(!open)}>
-        <span className="tool-card-icon">{done ? '✓' : '⟳'}</span>
-        <span className="tool-card-label">{name}</span>
-        <span className="tool-card-args">{argStr}</span>
-        <span className="tool-card-toggle">{open ? '▾' : '▸'}</span>
-      </div>
-      {open && result && (
-        <div className="tool-card-result">{result}</div>
+    <div className={`tool-card ${done ? 'done' : 'running'}`}>
+      <button className="tool-card-header" onClick={() => setOpen(v => !v)} style={{ borderLeftColor: meta.color }} type="button">
+        <span className="tool-card-icon">{done ? meta.icon : ''}</span>
+        <span className="tool-card-label">{meta.label}</span>
+        {argStr && <span className="tool-card-args">{argStr}</span>}
+        <span className="tool-card-state">{done ? '完成' : '运行中'}</span>
+        <span className="tool-card-toggle">{open ? '-' : '+'}</span>
+      </button>
+      {open && visibleResult && (
+        <>
+          <pre className={`tool-card-result ${large && !showFull ? 'tool-card-result-preview' : ''}`}>{visibleResult}</pre>
+          {large && !showFull && (
+            <button className="tool-card-expand-btn" onClick={() => setShowFull(true)} type="button">
+              查看完整结果
+            </button>
+          )}
+        </>
       )}
     </div>
   );
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  read_chapter: '读取章节',
-  search_content: '搜索内容',
-  get_chapter_stats: '获取统计',
-  get_book_outline: '获取目录',
-  insert_text: '插入文字',
-  replace_in_chapter: '替换文字',
-  create_chapter: '创建章节',
-  rename_chapter: '重命名',
-  delete_chapter: '删除章节',
-  apply_style: '应用样式',
-  create_group: '创建分组',
-  rename_group: '重命名分组',
-  move_chapter_to_group: '移动章节',
-};
-
 const ChatMessageBubble: React.FC<Props> = ({ message }) => {
+  const [showThinking, setShowThinking] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const isUser = message.role === 'user';
   const toolCalls = message.toolCalls || [];
-  const hasTools = toolCalls.length > 0;
-  const isStreaming = message.streaming;
-  const done = !isStreaming && !!message.content;
+  const isStreaming = Boolean(message.streaming);
+  const hasContent = message.content.trim().length > 0;
+  const done = !isStreaming && hasContent && !message.error;
+  const runningTools = toolCalls.filter(t => t.phase === 'running');
+  const phaseLabel = message.phase ? PHASE_LABELS[message.phase] : '';
+  const thinking = message.thinking?.trim() || '';
+  const elapsedMs = message.startedAt ? (message.completedAt || now) - message.startedAt : 0;
+  const elapsed = elapsedMs >= 1000 ? `${(elapsedMs / 1000).toFixed(elapsedMs < 10000 ? 1 : 0)}s` : '';
+
+  useEffect(() => {
+    if (!isStreaming || !message.startedAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [isStreaming, message.startedAt]);
 
   return (
     <div className={`msg-outer ${isUser ? 'msg-outer-user' : 'msg-outer-assistant'}`}>
-      {/* Tool calls */}
-      {hasTools && (
+      {!isUser && toolCalls.length > 0 && (
         <div className="tool-card-group">
           {toolCalls.map((tc) => (
             <ToolCard key={tc.id} name={tc.name} args={tc.args} result={tc.result} done={tc.phase === 'done'} />
@@ -60,33 +118,46 @@ const ChatMessageBubble: React.FC<Props> = ({ message }) => {
         </div>
       )}
 
-      {/* Message content */}
-      <div className={`message ${isUser ? 'message-user' : 'message-assistant'} ${isStreaming ? 'streaming' : ''}`}>
-        {isStreaming && toolCalls.length === 0 && message.content === '' ? (
-          <div className="streaming-spark" />
+      {!isUser && thinking && (
+        <div className={`thinking-panel ${showThinking ? 'open' : ''}`}>
+          <button className="thinking-toggle" type="button" onClick={() => setShowThinking(v => !v)}>
+            <span className="thinking-chevron">{showThinking ? '−' : '+'}</span>
+            <span>{isStreaming && !hasContent ? '正在思考' : '思考过程'}</span>
+            {elapsed && <span className="thinking-duration">{elapsed}</span>}
+          </button>
+          {showThinking && (
+            <div className="thinking-content">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinking}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={`message ${isUser ? 'message-user' : 'message-assistant'} ${isStreaming ? 'streaming' : ''} ${message.error ? 'error' : ''}`}>
+        {!isUser && isStreaming && !hasContent ? (
+          <div className="streaming-head">
+            <span className="streaming-spark" />
+            <span className="streaming-status-text">
+              {runningTools.length > 0 ? runningTools.map(t => TOOL_META[t.name]?.label || t.name).join('、') : phaseLabel || '思考中'}
+            </span>
+          </div>
         ) : (
           <div className="message-content">
-            {done ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            ) : (
-              <div className="streaming-text">{message.content || ''}</div>
-            )}
-            {isStreaming && message.content ? <span className="streaming-spark" /> : null}
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content || message.error || ''}</ReactMarkdown>
+            {!isUser && isStreaming && hasContent ? <span className="streaming-caret" /> : null}
           </div>
         )}
       </div>
 
-      {/* Status line */}
-      {!isUser && isStreaming && (
-        <div className="streaming-status">
-          {toolCalls.length > 0
-            ? toolCalls.filter(t => t.phase === 'running').map(t => STATUS_LABELS[t.name] || t.name).join(', ') + '...'
-            : '思考中...'}
-        </div>
-      )}
-      {!isUser && done && toolCalls.length > 0 && (
-        <div className="streaming-status done">
-          ✓ {toolCalls.length} 个工具调用完成
+      {!isUser && (isStreaming || message.error || toolCalls.length > 0) && (
+        <div className={`streaming-status ${message.error ? 'error' : done ? 'done' : ''}`}>
+          {message.error
+            ? message.error
+            : isStreaming
+              ? (runningTools.length > 0 ? `正在${runningTools.map(t => TOOL_META[t.name]?.label || t.name).join('、')}` : `${phaseLabel || '思考中'}${elapsed ? ` · ${elapsed}` : ''}`)
+              : toolCalls.length > 0
+                ? `${toolCalls.length} 个工具调用完成${elapsed ? ` · ${elapsed}` : ''}`
+                : elapsed}
         </div>
       )}
     </div>
