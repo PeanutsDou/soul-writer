@@ -7,14 +7,14 @@ interface Props {
 
 const ChatMessageBubble: React.FC<Props> = ({ message }) => {
   const isUser = message.role === 'user';
-  const isStreaming = message.streaming;
 
   return (
-    <div className={`chat-msg ${isUser ? 'chat-msg-user' : 'chat-msg-ai'}`}>
-      <div className="chat-msg-role">{isUser ? '你' : 'AI'}</div>
-      <div className="chat-msg-content">
-        {message.content || (isStreaming ? <span className="chat-cursor">▊</span> : '')}
-        {isStreaming && message.content ? <span className="chat-cursor">▊</span> : null}
+    <div className={`msg-outer ${isUser ? 'msg-outer-user' : 'msg-outer-assistant'}`}>
+      <div className={`message ${isUser ? 'message-user' : 'message-assistant'}`}>
+        <div className="message-content">{message.content || ''}</div>
+        {message.streaming && (
+          <div className="streaming-spark" />
+        )}
       </div>
     </div>
   );

@@ -44,6 +44,11 @@ def save_model_configs(configs: list):
 _agents = {}  # stream_id -> Agent
 
 def _get_or_create_agent(config: dict, system_prompt: str = ""):
+    # Key by model identity so different models get separate conversation history
+    agent_key = f"{config.get('url','')}|{config.get('api_key','')[:8]}|{config.get('model','')}"
+    if agent_key in _agents:
+        return _agents[agent_key]
+
     from ai.llm_client import LLMClient
     from ai.agent import Agent
     llm = LLMClient(
@@ -51,7 +56,9 @@ def _get_or_create_agent(config: dict, system_prompt: str = ""):
         api_key=config.get("api_key", ""),
         model=config.get("model", "gpt-3.5-turbo"),
     )
-    return Agent(llm, system_prompt)
+    agent = Agent(llm, system_prompt)
+    _agents[agent_key] = agent
+    return agent
 
 
 def handle(method: str, params: dict):

@@ -17,7 +17,6 @@ const ChatPanel: React.FC = () => {
     return () => destroy();
   }, []);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -26,10 +25,6 @@ const ChatPanel: React.FC = () => {
 
   return (
     <div className="chat-panel">
-      <div className="chat-panel-header">
-        <span>AI 助手</span>
-      </div>
-
       <div className="chat-messages">
         {!hasConfig ? (
           <div className="chat-empty">
@@ -37,7 +32,8 @@ const ChatPanel: React.FC = () => {
           </div>
         ) : messages.length === 0 ? (
           <div className="chat-empty">
-            <p>开始与 AI 对话</p>
+            <h2>AI 助手</h2>
+            <p>开始对话</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -47,11 +43,10 @@ const ChatPanel: React.FC = () => {
         <div ref={bottomRef} />
       </div>
 
-      <ModelSwitcher />
-      <ChatInput
-        onSend={send}
-        disabled={streaming || !hasConfig}
-      />
+      <div className="chat-panel-footer">
+        <ModelSwitcher />
+        <ChatInput onSend={send} disabled={streaming || !hasConfig} />
+      </div>
     </div>
   );
 };

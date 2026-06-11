@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 
 interface Props {
   onSend: (text: string) => void;
@@ -22,34 +22,29 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
     }
   }, [handleSend]);
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const el = inputRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-    }
-  }, [text]);
-
   return (
     <div className="chat-input-area">
-      <textarea
-        ref={inputRef}
-        className="chat-input"
-        placeholder="输入消息..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        rows={1}
-      />
-      <button
-        className="chat-send-btn"
-        onClick={handleSend}
-        disabled={disabled || !text.trim()}
-      >
-        {disabled ? '···' : '↑'}
-      </button>
+      <div className="chat-input-wrapper">
+        <textarea
+          ref={inputRef}
+          className="chat-input"
+          placeholder="输入消息..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          rows={1}
+        />
+        <div className="input-controls">
+          <button
+            className={`send-btn ${disabled ? '' : 'active'}`}
+            onClick={handleSend}
+            disabled={disabled || !text.trim()}
+          >
+            {disabled ? '⏳' : '↑'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
