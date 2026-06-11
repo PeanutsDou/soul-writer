@@ -82,11 +82,14 @@ export const useAiStore = create<AiState>((set, get) => ({
     const { streaming, selectedConfigId } = get();
     if (streaming || !text.trim()) return;
 
-    // Need model config
     const { useModelConfigStore } = await import('./model-config-store');
     const configs = useModelConfigStore.getState().configs;
     const config = configs.find((c) => c.id === selectedConfigId) || configs[0];
     if (!config) return;
+
+    // Get current book/chapter from document store
+    const { useDocumentStore } = await import('./document-store');
+    const docState = useDocumentStore.getState();
 
     const userMsg: ChatMessage = {
       id: nextMsgId(),
@@ -113,6 +116,8 @@ export const useAiStore = create<AiState>((set, get) => ({
           api_key: config.api_key,
           model: config.model,
         },
+        currentBook: docState.currentBook,
+        currentChapter: docState.currentChapter,
       });
     } catch (err: any) {
       set((s) => {

@@ -17,6 +17,45 @@ class LLMClient:
         self.model = model
         self._client = httpx.Client(timeout=httpx.Timeout(120.0, connect=10.0))
 
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> dict:
+        """
+        Non-streaming chat completion. Returns full response with optional tool_calls.
+        """
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            payload["tools"] = tools
+
+        try:
+            response = self._client.post(url, json=payload, headers=headers)
+            if response.status_code != 200:
+                error_body = response.text[:300]
+                raise RuntimeError(f"API error {response.status_code}: {error_body}")
+            data = response.json()
+            choice = data.get("choices", [{}])[0]
+            msg = choice.get("message", {})
+            return {
+                "content": msg.get("content", ""),
+                "tool_calls": msg.get("tool_calls", []),
+            }
+        except httpx.RequestError as e:
+            raise RuntimeError(f"API connection failed: {e}")
+
     def chat_stream(
         self,
         messages: list[dict],

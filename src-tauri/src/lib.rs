@@ -122,14 +122,14 @@ fn save_model_configs(configs: Value, state: tauri::State<AppState>) -> Result<V
 }
 
 #[tauri::command]
-fn chat(message: String, config: Value, app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<Value, String> {
+fn chat(message: String, config: Value, current_book: Option<String>, current_chapter: Option<String>, app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<Value, String> {
     let guard = state.py.lock().map_err(|e| format!("Lock: {e}"))?;
     let py = guard.as_ref().ok_or("Python not started")?;
 
     // call_streaming blocks, but that's fine — Tauri commands run on a thread pool
     py.call_streaming(
         "chat",
-        json!({ "message": message, "config": config }),
+        json!({ "message": message, "config": config, "current_book": current_book, "current_chapter": current_chapter }),
         |event| match event {
             StreamEvent::Chunk(content) => {
                 let _ = app.emit("chat:chunk", json!({ "content": content }));
