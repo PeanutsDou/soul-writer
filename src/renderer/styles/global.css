@@ -302,8 +302,6 @@ html, body {
 
 /* ===== Sidebar ===== */
 .sidebar {
-  width: 240px;
-  min-width: 160px;
   flex-shrink: 0;
   background: var(--bg-secondary);
   display: flex;
@@ -719,14 +717,15 @@ html, body {
 
 /* ===== Resize Handle ===== */
 .resize-handle {
-  width: 3px;
+  width: 4px;
   cursor: col-resize;
   flex-shrink: 0;
   background: transparent;
-  transition: background 0.15s;
+  transition: background 0.2s;
+  z-index: 10;
 }
 .resize-handle:hover {
-  background: var(--border);
+  background: var(--accent-dim);
 }
 
 /* ===== Color Picker ===== */
@@ -772,8 +771,6 @@ html, body {
 
 /* ===== Chat Panel (AI) — Neck Code style ===== */
 .chat-panel {
-  width: 340px;
-  min-width: 280px;
   flex-shrink: 0;
   background: var(--bg-secondary);
   display: flex;
@@ -903,12 +900,12 @@ html, body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
-  padding: 10px 36px 10px 14px;
+  padding: 10px 40px 10px 14px;
   resize: none;
   outline: none;
   line-height: 1.5;
-  min-height: 44px;
-  max-height: 160px;
+  min-height: 68px;
+  max-height: 200px;
 }
 .chat-input:focus { border-color: var(--accent-dim); }
 .chat-input::placeholder { color: var(--text-muted); }
@@ -949,22 +946,21 @@ html, body {
 .model-switcher {
   display: flex;
   align-items: center;
-  padding: 0 14px 4px;
+  padding: 4px 14px 8px;
 }
 
 .model-select {
-  background: transparent;
-  color: var(--text-muted);
-  border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 2px 4px;
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
   font-size: 11px;
   font-family: var(--font-sans);
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s, color 0.15s;
 }
-.model-select:hover { color: var(--text-secondary); }
 .model-select:focus { border-color: var(--accent-dim); }
 
 /* Settings Panel */

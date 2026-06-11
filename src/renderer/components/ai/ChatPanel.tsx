@@ -44,8 +44,8 @@ const ChatPanel: React.FC = () => {
       </div>
 
       <div className="chat-panel-footer">
-        <ModelSwitcher />
         <ChatInput onSend={send} disabled={streaming || !hasConfig} />
+        <ModelSwitcher />
       </div>
     </div>
   );

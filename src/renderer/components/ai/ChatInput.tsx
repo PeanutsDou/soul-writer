@@ -28,12 +28,12 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
         <textarea
           ref={inputRef}
           className="chat-input"
-          placeholder="输入消息..."
+          placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          rows={1}
+          rows={3}
         />
         <div className="input-controls">
           <button
@@ -41,7 +41,7 @@ const ChatInput: React.FC<Props> = ({ onSend, disabled }) => {
             onClick={handleSend}
             disabled={disabled || !text.trim()}
           >
-            {disabled ? '⏳' : '↑'}
+            ↑
           </button>
         </div>
       </div>
