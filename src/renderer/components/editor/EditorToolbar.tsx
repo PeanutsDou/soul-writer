@@ -128,8 +128,7 @@ const EditorToolbar: React.FC<Props> = ({ editor }) => {
           className="toolbar-select"
           onChange={(e) => {
             if (editor) {
-              const val = e.target.value;
-              editor.chain().focus().setMark('textStyle', { lineHeight: val }).run();
+              editor.chain().focus().setLineHeight(e.target.value).run();
             }
           }}
           defaultValue="1.8"

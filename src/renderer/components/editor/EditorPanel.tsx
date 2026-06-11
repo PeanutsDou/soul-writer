@@ -8,6 +8,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import FontFamily from '@tiptap/extension-font-family';
 import FontSize from '../../extensions/FontSize';
+import LineHeight from '../../extensions/LineHeight';
 import { useDocumentStore } from '../../stores/document-store';
 import EditorToolbar from './EditorToolbar';
 
@@ -32,6 +33,7 @@ const EditorPanel: React.FC = () => {
       TextStyle,
       FontFamily,
       FontSize,
+      LineHeight,
       Color,
       TextAlign.configure({ types: ['paragraph'] }),
       Placeholder.configure({ placeholder: '开始写作...' }),

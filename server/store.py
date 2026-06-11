@@ -56,19 +56,53 @@ class Store:
         """)
         self.db.commit()
 
+    def _count_chars(self, content_json: str) -> int:
+        """Count text characters in TipTap JSON content."""
+        if not content_json:
+            return 0
+        try:
+            import json
+            doc = json.loads(content_json)
+            return self._walk_text(doc)
+        except (json.JSONDecodeError, TypeError):
+            return 0
+
+    def _walk_text(self, node) -> int:
+        """Recursively sum lengths of all 'text' fields."""
+        count = 0
+        if isinstance(node, dict):
+            if 'text' in node and isinstance(node['text'], str):
+                count += len(node['text'])
+            for v in node.values():
+                count += self._walk_text(v)
+        elif isinstance(node, list):
+            for item in node:
+                count += self._walk_text(item)
+        return count
+
     # ── Books ──
 
     def list_books(self) -> list:
         rows = self.db.execute("""
             SELECT b.*,
-                   COUNT(c.name) AS chapter_count,
-                   IFNULL(SUM(LENGTH(c.content)), 0) AS total_words
+                   COUNT(c.name) AS chapter_count
             FROM books b
             LEFT JOIN chapters c ON c.book_id = b.id
             GROUP BY b.id
             ORDER BY b.updated_at DESC
         """).fetchall()
-        return [self._book_row(r) for r in rows]
+        result = []
+        for r in rows:
+            book = self._book_row(r)
+            # Compute total words from chapter contents
+            ch_rows = self.db.execute(
+                "SELECT content FROM chapters WHERE book_id = ?",
+                (r["id"],),
+            ).fetchall()
+            total_words = sum(self._count_chars(ch["content"]) for ch in ch_rows)
+            book["totalWords"] = total_words
+            result.append(book)
+        return result
 
     def create_book(self, name: str) -> dict:
         bid = _uid()
@@ -135,20 +169,23 @@ class Store:
     def _book_info(self, bid: str) -> dict:
         row = self.db.execute("""
             SELECT b.*,
-                   COUNT(c.name) AS chapter_count,
-                   IFNULL(SUM(LENGTH(c.content)), 0) AS total_words
+                   COUNT(c.name) AS chapter_count
             FROM books b
             LEFT JOIN chapters c ON c.book_id = b.id
             WHERE b.id = ?
             GROUP BY b.id
         """, (bid,)).fetchone()
+        ch_rows = self.db.execute(
+            "SELECT content FROM chapters WHERE book_id = ?", (bid,)
+        ).fetchall()
+        total_words = sum(self._count_chars(ch["content"]) for ch in ch_rows)
         return {
             "id": row["id"],
             "name": row["name"],
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
             "chapterCount": row["chapter_count"] or 0,
-            "totalWords": row["total_words"] or 0,
+            "totalWords": total_words,
         }
 
     def _book_row(self, row: sqlite3.Row) -> dict:
@@ -158,7 +195,7 @@ class Store:
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
             "chapterCount": row["chapter_count"] or 0,
-            "totalWords": row["total_words"] or 0,
+            "totalWords": 0,  # filled by caller
         }
 
     # ── Groups ──

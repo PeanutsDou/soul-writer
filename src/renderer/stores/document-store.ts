@@ -43,7 +43,7 @@ function countWords(doc: any): number {
   let count = 0;
   function walk(node: any) {
     if (typeof node === 'object' && node !== null) {
-      if (node.text) count += node.text.length;
+      if (node.text && typeof node.text === 'string') count += [...node.text].length;
       for (const v of Object.values(node)) walk(v);
     }
     if (Array.isArray(node)) node.forEach(walk);
